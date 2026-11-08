@@ -1,0 +1,54 @@
+[
+  {
+    "id": "photo_1794153072566_ua16u2n",
+    "name": "mobile_1794153067937.jpg",
+    "url": "/api/uploads/photo_1794153072566_ua16u2n_mobile_1794153067937.jpg",
+    "size": 8425975,
+    "mimeType": "image/jpeg",
+    "createdAt": "2026-11-08T15:51:13.082Z",
+    "provider": "local_file",
+    "eventId": "sample2-mw80dckt",
+    "guestName": "Android Guest",
+    "caption": "Heartfelt cheers and wonderful memories 🥂❤️ #Celebration2026",
+    "likes": 0
+  },
+  {
+    "id": "photo_1794153116188_gmc4qll",
+    "name": "mobile_1794153111164.jpg",
+    "url": "/api/uploads/photo_1794153116188_gmc4qll_mobile_1794153111164.jpg",
+    "size": 5359802,
+    "mimeType": "image/jpeg",
+    "createdAt": "2026-11-08T15:51:56.696Z",
+    "provider": "local_file",
+    "eventId": "sample2-mw80dckt",
+    "guestName": "Android Guest",
+    "caption": "",
+    "likes": 10
+  },
+  {
+    "id": "photo_1794153151444_0hppke6",
+    "name": "mobile_1794153141428.jpg",
+    "url": "/api/uploads/photo_1794153151444_0hppke6_mobile_1794153141428.jpg",
+    "size": 7857069,
+    "mimeType": "image/jpeg",
+    "createdAt": "2026-11-08T15:52:31.958Z",
+    "provider": "local_file",
+    "eventId": "sample2-mw80dckt",
+    "guestName": "Android Guest",
+    "caption": "",
+    "likes": 9
+  },
+  {
+    "id": "photo_1794154773707_1el0091",
+    "name": "mobile_1794154764914.jpg",
+    "url": "/api/uploads/photo_1794154773707_1el0091_mobile_1794154764914.jpg",
+    "size": 7271333,
+    "mimeType": "image/jpeg",
+    "createdAt": "2026-11-08T16:19:33.734Z",
+    "provider": "local_file",
+    "eventId": "sample2-mw80dckt",
+    "guestName": "Android Guest",
+    "caption": "Heartfelt cheers and wonderful memories 🥂❤️ #Celebration2026",
+    "likes": 4
+  }
+]

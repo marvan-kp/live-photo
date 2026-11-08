@@ -1,0 +1,3 @@
+- [Liquid Glass Design System](memory/liquid_glass_design_system.md) — rules and components for the design language
+- [Project Goals](memory/project_goals.md) — key project objectives and scope
+- [Feedback](memory/feedback.md) — user preferences and guidance

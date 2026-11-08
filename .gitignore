@@ -1,0 +1,36 @@
+# Node & Web
+node_modules/
+**/node_modules/
+web/.next/
+web/out/
+web/.vercel/
+web/*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Android
+.gradle/
+**/build/
+android_app/local.properties
+android_app/.idea/
+*.iml
+.cxx/
+captures/
+.externalNativeBuild/
+
+# Temporary / Scratch
+mobile_temp/
+test_android/
+__pycache__/
+*.pyc
+.claude/
+
+# Sensitive secrets
+.env*.local
+
+# System & OS
+.DS_Store
+Thumbs.db
+*.swp
+*.bak
