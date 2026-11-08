@@ -293,9 +293,14 @@ function GuestEventContent() {
             </Link>
             <Link href={`/event/${event.id}/live`}>
               <GlassButton variant="secondary" className="text-xs px-3 py-2 flex items-center gap-1.5">
-                <Tv className="w-4 h-4 text-accent" /> Live Slideshow
+                <Tv className="w-4 h-4 text-accent" /> Live Stage Wall
               </GlassButton>
             </Link>
+            <a href={`/api/events/${event.id}/download`} download>
+              <GlassButton variant="secondary" className="text-xs px-3 py-2 flex items-center gap-1.5 text-accent hover:text-white">
+                <Download className="w-4 h-4" /> Download ZIP
+              </GlassButton>
+            </a>
             <GlassButton
               variant="secondary"
               className="text-xs px-3 py-2 flex items-center gap-1.5"

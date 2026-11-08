@@ -1,7 +1,7 @@
 "use client";
 
 import { GlassCard } from "@/components/ui/GlassCard";
-import { Calendar, MapPin, Image as ImageIcon, Edit, Trash2, QrCode, ExternalLink, Tv } from "lucide-react";
+import { Calendar, MapPin, Image as ImageIcon, Edit, Trash2, QrCode, ExternalLink, Tv, Download } from "lucide-react";
 import { Event } from "@/lib/events";
 import Link from "next/link";
 
@@ -93,6 +93,12 @@ export const EventCard = ({ event, onEdit, onDelete }: EventCardProps) => {
             </button>
           </Link>
         </div>
+
+        <a href={`/api/events/${event.id}/download`} download className="w-full">
+          <button className="w-full py-2 px-3 rounded-lg bg-white/5 hover:bg-white/15 text-white/80 hover:text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-white/10">
+            <Download className="w-3.5 h-3.5 text-accent" /> Download All (.ZIP)
+          </button>
+        </a>
 
         <div className="flex gap-2 pt-1">
           {onEdit && (
