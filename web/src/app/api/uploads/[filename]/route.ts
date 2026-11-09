@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { getUploadsDir } from "@/lib/paths";
 
 export async function GET(
   request: Request,
@@ -9,7 +10,13 @@ export async function GET(
   try {
     const { filename } = await context.params;
     const safeName = path.basename(filename);
-    const filePath = path.join(process.cwd(), "public", "uploads", safeName);
+    
+    // Check dynamic uploads dir (/tmp/uploads on Vercel) first
+    let filePath = path.join(getUploadsDir(), safeName);
+    if (!fs.existsSync(filePath)) {
+      // Fallback to static public uploads dir
+      filePath = path.join(process.cwd(), "public", "uploads", safeName);
+    }
 
     if (!fs.existsSync(filePath)) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });

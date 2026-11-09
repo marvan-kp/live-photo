@@ -306,30 +306,35 @@ fun MainScreen(
             // Connection alert if offline
             if (events.isEmpty() && !isLoading) {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2E1C14)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF261D0F)),
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showSettingsDialog = true }
-                        .border(1.dp, Color(0xFFE5A93C), RoundedCornerShape(14.dp))
+                        .clickable {
+                            // Instant 1-tap switch to live Vercel Cloud
+                            client.serverUrl = LivePhotoApiClient.DEFAULT_CLOUD_URL
+                            refresh()
+                        }
+                        .border(1.dp, GoldAccent.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("📡", fontSize = 20.sp)
+                        Text("🌐", fontSize = 20.sp)
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Cannot reach server: ${client.serverUrl}",
+                                text = "Cannot reach: ${client.serverUrl}",
                                 color = Color(0xFFFFCC66),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Tap here to select Wi-Fi IP (192.168.0.103:3000) so your phone can sync.",
-                                color = TextSecondary,
-                                fontSize = 11.sp
+                                text = "Tap here to connect to live Cloud (web-rho-sage-25.vercel.app)",
+                                color = GoldAccent,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
@@ -1569,6 +1574,33 @@ fun MainScreen(
                     )
 
                     // Presets
+                    Surface(
+                        color = if (tempUrl.contains("vercel.app")) GoldAccent.copy(alpha = 0.25f) else GraphiteCard,
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (tempUrl.contains("vercel.app")) GoldAccent else GlassBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                tempUrl = LivePhotoApiClient.DEFAULT_CLOUD_URL
+                                testResultText = null
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 10.dp, horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text("🌐", fontSize = 16.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Live Cloud (web-rho-sage-25.vercel.app)",
+                                color = if (tempUrl.contains("vercel.app")) GoldAccent else TextPrimary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -1830,10 +1862,11 @@ fun MainScreen(
     // QR Code Display Modal
     if (qrEventForModal != null) {
         val ev = qrEventForModal!!
-        val publicBase = client.serverUrl
-            .replace("localhost", "192.168.0.103")
-            .replace("127.0.0.1", "192.168.0.103")
-            .replace("10.0.2.2", "192.168.0.103")
+        val publicBase = if (client.serverUrl.contains("localhost") || client.serverUrl.contains("10.0.2.2") || client.serverUrl.contains("127.0.0.1")) {
+            LivePhotoApiClient.DEFAULT_CLOUD_URL
+        } else {
+            client.serverUrl
+        }
         val eventUrl = "$publicBase/event/${ev.id}"
         val qrImageUrl = "https://api.qrserver.com/v1/create-qr-code/?size=350x350&margin=10&data=" + Uri.encode(eventUrl)
 

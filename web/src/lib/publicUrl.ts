@@ -6,15 +6,18 @@ export function getPublicBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_VERCEL_URL) {
     return `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`;
   }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
   // 2. Client-side window check
   if (typeof window !== "undefined") {
     const origin = window.location.origin;
     if (origin.includes("localhost") || origin.includes("127.0.0.1")) {
-      return origin.replace("localhost", "192.168.0.103").replace("127.0.0.1", "192.168.0.103");
+      return "https://web-rho-sage-25.vercel.app";
     }
     return origin;
   }
   // 3. Fallback
-  return "http://192.168.0.103:3000";
+  return "https://web-rho-sage-25.vercel.app";
 }
 

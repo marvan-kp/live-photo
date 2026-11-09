@@ -16,14 +16,18 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 class LivePhotoApiClient(context: Context) {
+    companion object {
+        const val DEFAULT_CLOUD_URL = "https://web-rho-sage-25.vercel.app"
+    }
+
     private val prefs: SharedPreferences =
         context.getSharedPreferences("live_photo_prefs", Context.MODE_PRIVATE)
 
     var serverUrl: String
         get() {
             val saved = prefs.getString("server_url", null)
-            if (saved.isNullOrBlank() || saved.contains("10.0.2.2")) {
-                return "http://192.168.0.103:3000"
+            if (saved.isNullOrBlank() || saved.contains("10.0.2.2") || saved.contains("192.168.0.103") || saved.contains("localhost")) {
+                return DEFAULT_CLOUD_URL
             }
             return saved
         }
