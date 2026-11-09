@@ -141,11 +141,16 @@ class LivePhotoApiClient(context: Context) {
                 val list = mutableListOf<Photo>()
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
+                    val rawUrl = obj.optString("url")
+                    val rawThumb = obj.optString("thumbnailUrl")
+                    val fullUrl = resolvePhotoUrl(rawUrl)
+                    val thumbUrl = if (rawThumb.isNotBlank()) resolvePhotoUrl(rawThumb) else fullUrl
                     list.add(
                         Photo(
                             id = obj.optString("id"),
                             name = obj.optString("name"),
-                            url = resolvePhotoUrl(obj.optString("url")),
+                            url = fullUrl,
+                            thumbnailUrl = thumbUrl,
                             guestName = obj.optString("guestName", "Guest"),
                             caption = obj.optString("caption", ""),
                             likes = obj.optInt("likes", 0),
@@ -171,13 +176,38 @@ class LivePhotoApiClient(context: Context) {
             val mediaType = "image/jpeg".toMediaTypeOrNull()
             val fileBody = bytes.toRequestBody(mediaType)
 
-            val multipart = MultipartBody.Builder()
+            // Generate lightweight compressed thumbnail (~40-60KB) for instant grid preview
+            val thumbBytes = try {
+                val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bitmap != null) {
+                    val maxDim = 600
+                    val scale = minOf(1f, maxDim.toFloat() / maxOf(bitmap.width, bitmap.height))
+                    val targetW = (bitmap.width * scale).toInt()
+                    val targetH = (bitmap.height * scale).toInt()
+                    val scaled = android.graphics.Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
+                    val stream = java.io.ByteArrayOutputStream()
+                    scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
+                    stream.toByteArray()
+                } else {
+                    null
+                }
+            } catch (_: Exception) {
+                null
+            }
+
+            val multipartBuilder = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("files", fileName, fileBody)
                 .addFormDataPart("eventId", eventId)
                 .addFormDataPart("guestName", guestName)
                 .addFormDataPart("caption", caption)
-                .build()
+
+            if (thumbBytes != null) {
+                val thumbBody = thumbBytes.toRequestBody(mediaType)
+                multipartBuilder.addFormDataPart("thumbnails", "thumb_$fileName", thumbBody)
+            }
+
+            val multipart = multipartBuilder.build()
 
             val request = Request.Builder()
                 .url("$serverUrl/api/photos")

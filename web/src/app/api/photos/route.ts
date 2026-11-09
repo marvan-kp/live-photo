@@ -20,6 +20,7 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const files = formData.getAll("files") as File[];
+    const thumbnails = formData.getAll("thumbnails") as File[];
     const eventId = (formData.get("eventId") as string) || undefined;
     const guestName = (formData.get("guestName") as string) || undefined;
     const caption = (formData.get("caption") as string) || undefined;
@@ -30,16 +31,25 @@ export async function POST(req: Request) {
 
     const uploadedResults = [];
 
-    for (const file of files) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
+
+      let thumbBuffer: Buffer | undefined;
+      const thumbFile = thumbnails[i];
+      if (thumbFile) {
+        thumbBuffer = Buffer.from(await thumbFile.arrayBuffer());
+      }
+
       const savedFile = await uploadFileToCloud(
         buffer,
         file.name,
         file.type || "image/jpeg",
         eventId,
         guestName,
-        caption
+        caption,
+        thumbBuffer
       );
       uploadedResults.push(savedFile);
     }

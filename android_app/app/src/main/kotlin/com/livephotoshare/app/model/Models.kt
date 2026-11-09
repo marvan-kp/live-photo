@@ -16,6 +16,7 @@ data class Photo(
     val id: String = "",
     val name: String = "",
     val url: String = "",
+    val thumbnailUrl: String = "",
     val guestName: String = "Guest",
     val caption: String = "",
     val likes: Int = 0,

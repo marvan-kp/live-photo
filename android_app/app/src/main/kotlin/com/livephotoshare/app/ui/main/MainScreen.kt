@@ -1,8 +1,12 @@
 package com.livephotoshare.app.ui.main
 
+import android.app.DownloadManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Environment
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -552,6 +556,31 @@ fun MainScreen(
                     ) {
                         Text("Show QR", color = GoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
+
+                    Button(
+                        onClick = {
+                            val ev = selectedEvent!!
+                            try {
+                                val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                val zipUrl = "${client.serverUrl}/api/events/${ev.id}/download"
+                                val req = DownloadManager.Request(Uri.parse(zipUrl)).apply {
+                                    setTitle("${ev.name}_all_photos.zip")
+                                    setDescription("Downloading all photos for ${ev.name}")
+                                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                    setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "${ev.name}_photos.zip")
+                                }
+                                dm.enqueue(req)
+                                Toast.makeText(context, "📦 Downloading all full-size photos (.ZIP)...", Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "ZIP download error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MidnightSurface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent.copy(alpha = 0.4f))
+                    ) {
+                        Text("📦 ZIP", color = GoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 
@@ -767,7 +796,7 @@ fun MainScreen(
                         ) {
                             Box(modifier = Modifier.fillMaxSize()) {
                                 AsyncImage(
-                                    model = photo.url,
+                                    model = photo.thumbnailUrl.ifBlank { photo.url },
                                     contentDescription = photo.name,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
@@ -905,7 +934,7 @@ fun MainScreen(
                                 ) {
                                     Box(modifier = Modifier.fillMaxSize()) {
                                         AsyncImage(
-                                            model = match.photo.url,
+                                            model = match.photo.thumbnailUrl.ifBlank { match.photo.url },
                                             contentDescription = match.photo.name,
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier.fillMaxSize()
@@ -1127,7 +1156,7 @@ fun MainScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     Box(modifier = Modifier.fillMaxWidth()) {
                         AsyncImage(
-                            model = p.url,
+                            model = p.thumbnailUrl.ifBlank { p.url },
                             contentDescription = p.name,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1235,6 +1264,34 @@ fun MainScreen(
                             Text("↗️", fontSize = 14.sp)
                         }
 
+                        // 📥 Download button in quick action bar
+                        IconButton(
+                            onClick = {
+                                try {
+                                    val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                    val downloadUri = Uri.parse(p.url)
+                                    val cleanName = if (p.name.isNotBlank()) p.name else "signature_marvan_${p.id}.jpg"
+                                    val req = DownloadManager.Request(downloadUri).apply {
+                                        setTitle(cleanName)
+                                        setDescription("Downloading full original photo")
+                                        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                        setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, cleanName)
+                                    }
+                                    dm.enqueue(req)
+                                    Toast.makeText(context, "📥 Downloading full original photo to Downloads...", Toast.LENGTH_LONG).show()
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(GoldAccent)
+                                .border(1.dp, GoldAccent, RoundedCornerShape(12.dp))
+                        ) {
+                            Text("📥", fontSize = 14.sp)
+                        }
+
                         if (isAdmin) {
                             IconButton(
                                 onClick = { photoToDelete = p },
@@ -1258,6 +1315,38 @@ fun MainScreen(
                         ) {
                             Text("✕", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
+                    }
+
+                    // Prominent Full-Width Download Original Button
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            try {
+                                val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                val downloadUri = Uri.parse(p.url)
+                                val cleanName = if (p.name.isNotBlank()) p.name else "signature_marvan_${p.id}.jpg"
+                                val req = DownloadManager.Request(downloadUri).apply {
+                                    setTitle(cleanName)
+                                    setDescription("Downloading full original photo")
+                                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                    setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, cleanName)
+                                }
+                                dm.enqueue(req)
+                                Toast.makeText(context, "📥 Downloading full original photo to Downloads...", Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldAccent)
+                    ) {
+                        Text(
+                            text = "📥 Download Full Size Photo",
+                            color = DarkBackground,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }

@@ -8,6 +8,7 @@ export interface StoredFile {
   id: string;
   name: string;
   url: string;
+  thumbnailUrl?: string;
   size: number;
   mimeType: string;
   createdAt: string;
@@ -57,7 +58,8 @@ export async function uploadFileToCloud(
   mimeType: string = 'image/jpeg',
   eventId?: string,
   guestName?: string,
-  caption?: string
+  caption?: string,
+  thumbnailBuffer?: Buffer | Uint8Array
 ): Promise<StoredFile> {
   const fileId = `photo_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   const cleanExt = path.extname(fileName) || '.jpg';
@@ -68,10 +70,22 @@ export async function uploadFileToCloud(
 
   const result = await uploadToStorage(buf, storedFileName, mimeType);
 
+  let thumbUrl = result.url;
+  if (thumbnailBuffer) {
+    try {
+      const thumbFileName = `thumb_${storedFileName}`;
+      const thumbResult = await uploadToStorage(Buffer.from(thumbnailBuffer), thumbFileName, 'image/jpeg');
+      thumbUrl = thumbResult.url;
+    } catch (e) {
+      console.warn('Could not save thumbnail, using original:', e);
+    }
+  }
+
   const record: StoredFile = {
     id: fileId,
     name: fileName,
     url: result.url,
+    thumbnailUrl: thumbUrl,
     size: buf.length,
     mimeType,
     createdAt: new Date().toISOString(),

@@ -43,6 +43,7 @@ interface PhotoData {
   id: string;
   name: string;
   url: string;
+  thumbnailUrl?: string;
   createdAt: string;
   guestName?: string;
   caption?: string;
@@ -448,7 +449,7 @@ function GuestEventContent() {
                 className="group relative aspect-square rounded-2xl overflow-hidden bg-graphite border border-white/10 cursor-pointer hover:border-accent/40 transition-all hover:scale-[1.02] duration-300"
               >
                 <img
-                  src={photo.url}
+                  src={photo.thumbnailUrl || photo.url}
                   alt={photo.name}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   loading="lazy"

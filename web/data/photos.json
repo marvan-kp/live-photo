@@ -9,8 +9,9 @@
     "provider": "local_file",
     "eventId": "sample2-mw80dckt",
     "guestName": "Android Guest",
-    "caption": "Heartfelt cheers and wonderful memories 🥂❤️ #Celebration2026",
-    "likes": 0
+    "caption": "Heartfelt cheers and wonderful memories \ud83e\udd42\u2764\ufe0f #Celebration2026",
+    "likes": 0,
+    "thumbnailUrl": "/api/uploads/thumb_photo_1794153072566_ua16u2n_mobile_1794153067937.jpg"
   },
   {
     "id": "photo_1794153116188_gmc4qll",
@@ -23,7 +24,8 @@
     "eventId": "sample2-mw80dckt",
     "guestName": "Android Guest",
     "caption": "",
-    "likes": 10
+    "likes": 10,
+    "thumbnailUrl": "/api/uploads/thumb_photo_1794153116188_gmc4qll_mobile_1794153111164.jpg"
   },
   {
     "id": "photo_1794153151444_0hppke6",
@@ -36,7 +38,8 @@
     "eventId": "sample2-mw80dckt",
     "guestName": "Android Guest",
     "caption": "",
-    "likes": 9
+    "likes": 9,
+    "thumbnailUrl": "/api/uploads/thumb_photo_1794153151444_0hppke6_mobile_1794153141428.jpg"
   },
   {
     "id": "photo_1794154773707_1el0091",
@@ -48,7 +51,8 @@
     "provider": "local_file",
     "eventId": "sample2-mw80dckt",
     "guestName": "Android Guest",
-    "caption": "Heartfelt cheers and wonderful memories 🥂❤️ #Celebration2026",
-    "likes": 4
+    "caption": "Heartfelt cheers and wonderful memories \ud83e\udd42\u2764\ufe0f #Celebration2026",
+    "likes": 4,
+    "thumbnailUrl": "/api/uploads/thumb_photo_1794154773707_1el0091_mobile_1794154764914.jpg"
   }
 ]
