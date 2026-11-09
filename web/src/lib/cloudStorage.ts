@@ -3,7 +3,7 @@ import path from "path";
 import { getDataFilePath, getUploadsDir } from "./paths";
 
 export interface StorageConfig {
-  provider: "local" | "supabase" | "s3_r2";
+  provider: "local" | "supabase" | "s3_r2" | "vercel_blob";
   supabase?: {
     url: string;
     anonKey?: string;
@@ -23,6 +23,13 @@ const CONFIG_FILE = getDataFilePath("storage_config.json");
 const UPLOADS_DIR = getUploadsDir();
 
 export function getStorageConfig(): StorageConfig {
+  // Check Vercel Blob first (zero-config persistent storage on Vercel)
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    return {
+      provider: "vercel_blob",
+    };
+  }
+
   try {
     if (fs.existsSync(CONFIG_FILE)) {
       const data = fs.readFileSync(CONFIG_FILE, "utf-8");
@@ -156,10 +163,24 @@ export async function uploadToStorage(
   buffer: Buffer,
   storedFileName: string,
   mimeType: string
-): Promise<{ url: string; provider: "local" | "supabase" | "s3_r2" }> {
+): Promise<{ url: string; provider: "local" | "supabase" | "s3_r2" | "vercel_blob" }> {
   const config = getStorageConfig();
 
-  // 1. Supabase Cloud Storage
+  // 1. Vercel Blob Cloud Storage (Zero-config persistent on Vercel)
+  if (config.provider === "vercel_blob" || process.env.BLOB_READ_WRITE_TOKEN) {
+    try {
+      const { put } = await import("@vercel/blob");
+      const blob = await put(`uploads/${storedFileName}`, buffer, {
+        access: "public",
+        contentType: mimeType,
+      });
+      return { url: blob.url, provider: "vercel_blob" };
+    } catch (err) {
+      console.warn("Vercel Blob upload failed, falling back:", err);
+    }
+  }
+
+  // 2. Supabase Cloud Storage
   if (config.provider === "supabase" && config.supabase?.url && config.supabase?.serviceRoleKey) {
     try {
       const { url, serviceRoleKey, bucket } = config.supabase;
@@ -186,7 +207,7 @@ export async function uploadToStorage(
     }
   }
 
-  // 2. Local Storage (always reliable fallback and default)
+  // 3. Local Storage (always reliable fallback and default)
   if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   }
@@ -205,7 +226,18 @@ export async function deleteFromStorage(photoUrl: string): Promise<boolean> {
   const config = getStorageConfig();
   const fileName = path.basename(photoUrl);
 
-  // 1. Delete from Supabase if stored on Supabase Cloud
+  // 1. Delete from Vercel Blob
+  if (photoUrl.includes("vercel-storage.com")) {
+    try {
+      const { del } = await import("@vercel/blob");
+      await del(photoUrl);
+      return true;
+    } catch (e) {
+      console.warn("Failed to delete from Vercel Blob:", e);
+    }
+  }
+
+  // 2. Delete from Supabase if stored on Supabase Cloud
   if (config.supabase?.url && config.supabase?.serviceRoleKey && photoUrl.includes("/storage/v1/object/")) {
     try {
       const { url, serviceRoleKey, bucket } = config.supabase;
@@ -226,7 +258,7 @@ export async function deleteFromStorage(photoUrl: string): Promise<boolean> {
     }
   }
 
-  // 2. Delete from local disk if stored locally
+  // 3. Delete from local disk if stored locally
   try {
     const localPath = path.join(UPLOADS_DIR, fileName);
     if (fs.existsSync(localPath)) {

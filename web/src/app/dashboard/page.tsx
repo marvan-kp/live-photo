@@ -48,9 +48,10 @@ export default function DashboardOverviewPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const timestamp = Date.now();
     Promise.all([
-      fetch("/api/events").then((r) => r.json()),
-      fetch("/api/photos").then((r) => r.json()),
+      fetch(`/api/events?_t=${timestamp}`, { cache: "no-store" }).then((r) => r.json()),
+      fetch(`/api/photos?_t=${timestamp}`, { cache: "no-store" }).then((r) => r.json()),
     ])
       .then(([evData, phData]) => {
         setEvents(evData.events || []);

@@ -137,11 +137,16 @@ fun MainScreen(
         }
     }
 
-    // Camera Capture Launcher for photo upload
+    // Camera Capture Launcher for photo upload (Admin only)
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicturePreview()
     ) { bitmap: Bitmap? ->
         if (bitmap != null) {
+            if (!isAdmin) {
+                Toast.makeText(context, "🔒 Only Admin Photographers can upload photos.", Toast.LENGTH_LONG).show()
+                showAdminDialog = true
+                return@rememberLauncherForActivityResult
+            }
             val stream = ByteArrayOutputStream()
             bitmap.compress(Bitmap.CompressFormat.JPEG, 92, stream)
             val bytes = stream.toByteArray()
@@ -205,11 +210,16 @@ fun MainScreen(
         }
     }
 
-    // Gallery Picker Launcher
+    // Gallery Picker Launcher (Admin only)
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
+            if (!isAdmin) {
+                Toast.makeText(context, "🔒 Only Admin Photographers can upload photos.", Toast.LENGTH_LONG).show()
+                showAdminDialog = true
+                return@rememberLauncherForActivityResult
+            }
             try {
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
                     val bytes = inputStream.readBytes()
@@ -703,130 +713,199 @@ fun MainScreen(
                 }
             }
 
-            // ⚡ Live Camera Auto-Upload Mode Toggle
-            Surface(
-                color = if (isAutoUploadMode) GoldAccent.copy(alpha = 0.15f) else GraphiteCard.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(16.dp),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (isAutoUploadMode) GoldAccent else GlassBorder
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        isAutoUploadMode = !isAutoUploadMode
-                        val active = selectedEvent
-                        if (isAutoUploadMode) {
-                            if (active != null) {
-                                Toast.makeText(context, "⚡ Live Auto-Upload ON: Photos will upload directly to ${active.name}!", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "⚡ Live Auto-Upload ON: Please select an event to sync with", Toast.LENGTH_SHORT).show()
+            // ⚡ Live Camera Auto-Upload Mode Toggle (Only visible for Admins)
+            if (isAdmin) {
+                Surface(
+                    color = if (isAutoUploadMode) GoldAccent.copy(alpha = 0.15f) else GraphiteCard.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isAutoUploadMode) GoldAccent else GlassBorder
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            isAutoUploadMode = !isAutoUploadMode
+                            val active = selectedEvent
+                            if (isAutoUploadMode) {
+                                if (active != null) {
+                                    Toast.makeText(context, "⚡ Live Auto-Upload ON: Photos will upload directly to ${active.name}!", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "⚡ Live Auto-Upload ON: Please select an event to sync with", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
-                    }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = if (isAutoUploadMode) "⚡" else "💤",
-                            fontSize = 20.sp
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = if (isAutoUploadMode) "⚡" else "💤",
+                                fontSize = 20.sp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (isAutoUploadMode) "Live Auto-Upload: ACTIVE" else "Live Auto-Upload: OFF",
+                                        color = if (isAutoUploadMode) GoldAccent else TextPrimary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
+                                    if (isAutoUploadMode) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Surface(
+                                            color = GreenSuccess.copy(alpha = 0.25f),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "LIVE",
+                                                color = GreenSuccess,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 9.sp,
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
                                 Text(
-                                    text = if (isAutoUploadMode) "Live Auto-Upload: ACTIVE" else "Live Auto-Upload: OFF",
-                                    color = if (isAutoUploadMode) GoldAccent else TextPrimary,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
+                                    text = if (isAutoUploadMode) {
+                                        if (selectedEvent != null) "Auto-syncing camera & gallery to \"${selectedEvent!!.name}\"" else "Tap an event above to select destination"
+                                    } else {
+                                        "Enable to auto-sync camera shots straight to event cloud"
+                                    },
+                                    color = TextSecondary,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
-                                if (isAutoUploadMode) {
+                            }
+                        }
+
+                        Switch(
+                            checked = isAutoUploadMode,
+                            onCheckedChange = { isAutoUploadMode = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = DarkBackground,
+                                checkedTrackColor = GoldAccent,
+                                uncheckedThumbColor = TextSecondary,
+                                uncheckedTrackColor = MidnightSurface
+                            )
+                        )
+                    }
+                }
+
+                if (autoUploadStatus != null) {
+                    Surface(
+                        color = GoldAccent.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                color = GoldAccent,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = autoUploadStatus!!,
+                                color = GoldAccent,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Guest Curated Stream Notice Banner
+                Surface(
+                    color = GraphiteCard.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAdminDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("📸", fontSize = 20.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Official Photographer Stream",
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Surface(
-                                        color = GreenSuccess.copy(alpha = 0.25f),
+                                        color = GoldAccent.copy(alpha = 0.2f),
                                         shape = RoundedCornerShape(6.dp)
                                     ) {
                                         Text(
-                                            text = "LIVE",
-                                            color = GreenSuccess,
+                                            text = "CURATED",
+                                            color = GoldAccent,
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize = 9.sp,
                                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                                         )
                                     }
                                 }
+                                Text(
+                                    text = "Photos are uploaded live by official photographers. Guests can browse, like & download.",
+                                    color = TextSecondary,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
+                        }
+                        Surface(
+                            color = GoldAccent.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent.copy(alpha = 0.4f))
+                        ) {
                             Text(
-                                text = if (isAutoUploadMode) {
-                                    if (selectedEvent != null) "Auto-syncing camera & gallery to \"${selectedEvent!!.name}\"" else "Tap an event above to select destination"
-                                } else {
-                                    "Enable to auto-sync camera shots straight to event cloud"
-                                },
-                                color = TextSecondary,
+                                text = "🔒 Login",
+                                color = GoldAccent,
                                 fontSize = 11.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
                     }
-
-                    Switch(
-                        checked = isAutoUploadMode,
-                        onCheckedChange = { isAutoUploadMode = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = DarkBackground,
-                            checkedTrackColor = GoldAccent,
-                            uncheckedThumbColor = TextSecondary,
-                            uncheckedTrackColor = MidnightSurface
-                        )
-                    )
                 }
             }
 
-            if (autoUploadStatus != null) {
-                Surface(
-                    color = GoldAccent.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            color = GoldAccent,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = autoUploadStatus!!,
-                            color = GoldAccent,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-
-            // AI Face Finder & Camera Buttons
+            // Action Buttons Row (Differentiated for Admin vs Guest)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // AI Face Finder
+                // AI Face Finder (Available for everyone)
                 Button(
                     onClick = { selfieLauncher.launch(null) },
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1.2f)
                         .height(50.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = GoldAccent)
@@ -839,39 +918,66 @@ fun MainScreen(
                     )
                 }
 
-                // Snap Photo
-                Button(
-                    onClick = { cameraLauncher.launch(null) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(50.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isAutoUploadMode) GoldAccent.copy(alpha = 0.25f) else GraphiteCard
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isAutoUploadMode) GoldAccent else GlassBorder
-                    )
-                ) {
-                    Text(
-                        text = if (isAutoUploadMode) "⚡ Snap & Upload" else "📷 Snap Photo",
-                        color = if (isAutoUploadMode) GoldAccent else TextPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-                }
+                if (isAdmin) {
+                    // Admin Snap Photo
+                    Button(
+                        onClick = { cameraLauncher.launch(null) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isAutoUploadMode) GoldAccent.copy(alpha = 0.25f) else GraphiteCard
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isAutoUploadMode) GoldAccent else GlassBorder
+                        )
+                    ) {
+                        Text(
+                            text = if (isAutoUploadMode) "⚡ Snap & Upload" else "📷 Snap Photo",
+                            color = if (isAutoUploadMode) GoldAccent else TextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
 
-                // Gallery
-                IconButton(
-                    onClick = { galleryLauncher.launch("image/*") },
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(GraphiteCard)
-                        .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
-                ) {
-                    Text("🖼️", fontSize = 18.sp)
+                    // Admin Gallery
+                    IconButton(
+                        onClick = { galleryLauncher.launch("image/*") },
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(GraphiteCard)
+                            .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+                    ) {
+                        Text("🖼️", fontSize = 18.sp)
+                    }
+                } else {
+                    // Locked for Guests
+                    Button(
+                        onClick = {
+                            Toast.makeText(context, "🔒 Only Admin Photographers can upload photos. Tap to sign in.", Toast.LENGTH_LONG).show()
+                            showAdminDialog = true
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = GraphiteCard),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🔒", fontSize = 12.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Photographer",
+                                color = TextSecondary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1175,8 +1281,8 @@ fun MainScreen(
         }
     }
 
-    // Photo Upload Staging Dialog with Optional/Custom Name & Category Tags
-    if (stagingImageBytes != null) {
+    // Photo Upload Staging Dialog with Optional/Custom Name & Category Tags (Admin only)
+    if (stagingImageBytes != null && isAdmin) {
         var customNameInput by remember {
             mutableStateOf(if (client.guestName == "Android Guest" || client.guestName == "Guest") "" else client.guestName)
         }

@@ -12,7 +12,7 @@ export interface StoredFile {
   size: number;
   mimeType: string;
   createdAt: string;
-  provider: 'supabase' | 'r2_s3' | 'local_file' | 'local_fallback';
+  provider: 'supabase' | 'r2_s3' | 'local_file' | 'local_fallback' | 'vercel_blob';
   eventId?: string;
   guestName?: string;
   caption?: string;
@@ -89,7 +89,7 @@ export async function uploadFileToCloud(
     size: buf.length,
     mimeType,
     createdAt: new Date().toISOString(),
-    provider: result.provider === 'supabase' ? 'supabase' : result.provider === 's3_r2' ? 'r2_s3' : 'local_file',
+    provider: result.provider === 'supabase' ? 'supabase' : result.provider === 's3_r2' ? 'r2_s3' : result.provider === 'vercel_blob' ? 'vercel_blob' : 'local_file',
     eventId: eventId || 'marvan-live-2026',
     guestName: guestName || 'Guest',
     caption: caption || '',

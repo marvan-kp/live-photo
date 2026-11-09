@@ -21,7 +21,8 @@ import {
   X,
   Search,
   Wand2,
-  Filter
+  Filter,
+  Lock
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -69,24 +70,31 @@ function GuestEventContent() {
   const [selectedPhoto, setSelectedPhoto] = useState<PhotoData | null>(null);
   const [isPhotoEnhanced, setIsPhotoEnhanced] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load guest name from localStorage
+  // Check admin session and load guest name
   useEffect(() => {
+    fetch("/api/auth", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setIsAdmin(Boolean(d.authenticated)))
+      .catch(() => setIsAdmin(false));
+
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("livephoto_guest_name");
       if (saved) setGuestName(saved);
     }
   }, []);
 
-  // Fetch event and photos
+  // Fetch event and photos with cache busting
   const fetchEventData = async () => {
     if (!eventId) return;
     try {
+      const timestamp = Date.now();
       const [resEvent, resPhotos] = await Promise.all([
-        fetch(`/api/events/${eventId}`),
-        fetch(`/api/photos?eventId=${eventId}`)
+        fetch(`/api/events/${eventId}?_t=${timestamp}`, { cache: "no-store" }),
+        fetch(`/api/photos?eventId=${eventId}&_t=${timestamp}`, { cache: "no-store" })
       ]);
       if (resEvent.ok) {
         const evData = await resEvent.json();
@@ -314,79 +322,105 @@ function GuestEventContent() {
       </div>
 
       <div className="max-w-5xl mx-auto px-6 mt-8 space-y-8">
-        {/* Upload Action Bar */}
-        <GlassCard className="p-6 rounded-3xl border-white/20 shadow-2xl relative overflow-hidden">
-          <div className="flex flex-col md:flex-row gap-4 items-center">
-            <div className="flex-1 w-full space-y-3">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Camera className="w-5 h-5 text-accent" /> Share Your Photo
-                </h3>
-                <button
-                  onClick={handleGenerateAICaption}
-                  type="button"
-                  className="text-xs text-accent hover:underline flex items-center gap-1 bg-accent/10 px-2.5 py-1 rounded-full border border-accent/20"
+        {/* Upload Action Bar - Only Accessible to Admin Photographers */}
+        {isAdmin ? (
+          <GlassCard className="p-6 rounded-3xl border-accent/40 bg-accent/[0.04] shadow-2xl relative overflow-hidden">
+            <div className="flex flex-col md:flex-row gap-4 items-center">
+              <div className="flex-1 w-full space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-accent flex items-center gap-2">
+                    <Camera className="w-5 h-5 text-accent" /> Official Photographer Upload Station
+                  </h3>
+                  <button
+                    onClick={handleGenerateAICaption}
+                    type="button"
+                    className="text-xs text-accent hover:underline flex items-center gap-1 bg-accent/10 px-2.5 py-1 rounded-full border border-accent/20"
+                  >
+                    <Wand2 className="w-3 h-3" /> AI Caption Suggest
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    placeholder="Photographer Name (e.g. Marvan)"
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                    className="w-full bg-graphite/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/40 focus:outline-none focus:border-accent"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Caption or wishes..."
+                    value={caption}
+                    onChange={(e) => setCaption(e.target.value)}
+                    className="w-full bg-graphite/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/40 focus:outline-none focus:border-accent"
+                  />
+                </div>
+              </div>
+
+              <div className="w-full md:w-auto flex flex-col items-center">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  id="admin-photo-input"
+                  onChange={handleFileChange}
+                  disabled={uploading}
+                />
+                <label
+                  htmlFor="admin-photo-input"
+                  className={`cursor-pointer w-full md:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full font-bold text-sm tracking-wide transition-all shadow-lg ${
+                    uploading
+                      ? "bg-accent/50 text-black cursor-wait"
+                      : "bg-accent hover:bg-accent/90 text-black hover:scale-105 active:scale-95"
+                  }`}
                 >
-                  <Wand2 className="w-3 h-3" /> AI Caption Suggest
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="Your Name (e.g. Jessica)"
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                  className="w-full bg-graphite/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/40 focus:outline-none focus:border-accent"
-                />
-                <input
-                  type="text"
-                  placeholder="Caption or wishes..."
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  className="w-full bg-graphite/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/40 focus:outline-none focus:border-accent"
-                />
+                  {uploading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" /> Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-5 h-5" /> Snap & Upload Photo
+                    </>
+                  )}
+                </label>
               </div>
             </div>
 
-            <div className="w-full md:w-auto flex flex-col items-center">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                id="guest-photo-input"
-                onChange={handleFileChange}
-                disabled={uploading}
-              />
-              <label
-                htmlFor="guest-photo-input"
-                className={`cursor-pointer w-full md:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full font-bold text-sm tracking-wide transition-all shadow-lg ${
-                  uploading
-                    ? "bg-accent/50 text-black cursor-wait"
-                    : "bg-accent hover:bg-accent/90 text-black hover:scale-105 active:scale-95"
-                }`}
+            {uploadSuccess && (
+              <div className="mt-4 p-3 rounded-xl bg-green-500/20 border border-green-500/40 text-green-300 text-sm flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" /> Photo uploaded! It is now live on the event stream!
+              </div>
+            )}
+          </GlassCard>
+        ) : (
+          <GlassCard className="p-5 rounded-3xl border-white/10 bg-white/[0.02] shadow-xl">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent text-xl shrink-0">
+                  📸
+                </div>
+                <div>
+                  <div className="text-base font-bold text-white flex items-center gap-2">
+                    Official Photographer Stream <span className="text-[10px] bg-accent/20 text-accent font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Curated</span>
+                  </div>
+                  <div className="text-xs text-white/60 mt-0.5">
+                    Photos are captured live by official event photographers. Guests can browse, search by selfie, like, and download full-resolution originals.
+                  </div>
+                </div>
+              </div>
+              <Link
+                href="/login"
+                className="text-xs text-accent font-bold px-5 py-2.5 rounded-xl bg-accent/10 hover:bg-accent/20 border border-accent/30 transition-all flex items-center gap-2 whitespace-nowrap"
               >
-                {uploading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" /> Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-5 h-5" /> Snap & Upload Photo
-                  </>
-                )}
-              </label>
+                <Lock className="w-3.5 h-3.5" /> Photographer Login
+              </Link>
             </div>
-          </div>
-
-          {uploadSuccess && (
-            <div className="mt-4 p-3 rounded-xl bg-green-500/20 border border-green-500/40 text-green-300 text-sm flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4" /> Photo uploaded! It is now live on the event stream!
-            </div>
-          )}
-        </GlassCard>
+          </GlassCard>
+        )}
 
         {/* AI Filter Tags & Live Grid Header */}
         <div className="space-y-4 pt-4">

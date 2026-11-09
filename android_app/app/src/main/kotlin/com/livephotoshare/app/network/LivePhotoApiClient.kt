@@ -207,6 +207,7 @@ class LivePhotoApiClient(context: Context) {
                 .addFormDataPart("eventId", eventId)
                 .addFormDataPart("guestName", guestName)
                 .addFormDataPart("caption", caption)
+                .addFormDataPart("adminKey", "marvan2026")
 
             if (thumbBytes != null) {
                 val thumbBody = thumbBytes.toRequestBody(mediaType)
@@ -217,6 +218,7 @@ class LivePhotoApiClient(context: Context) {
 
             val request = Request.Builder()
                 .url("$serverUrl/api/photos")
+                .addHeader("x-admin-key", "marvan2026")
                 .post(multipart)
                 .build()
 

@@ -1,5 +1,3 @@
-"use server";
-
 import { NextResponse } from "next/server";
 import { Event, getEventById, updateEvent, deleteEvent } from "@/lib/events";
 import { deletePhotosForEvent } from "@/lib/storage";
@@ -13,7 +11,16 @@ export async function GET(
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
-  return NextResponse.json({ event });
+  return NextResponse.json(
+    { event },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+        "CDN-Cache-Control": "no-store",
+        "Vercel-CDN-Cache-Control": "no-store",
+      },
+    }
+  );
 }
 
 export async function PUT(

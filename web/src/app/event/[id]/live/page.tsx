@@ -51,9 +51,10 @@ function LiveSlideshowContent() {
   const fetchData = async () => {
     if (!eventId) return;
     try {
+      const timestamp = Date.now();
       const [resEvent, resPhotos] = await Promise.all([
-        fetch(`/api/events/${eventId}`),
-        fetch(`/api/photos?eventId=${eventId}`)
+        fetch(`/api/events/${eventId}?_t=${timestamp}`, { cache: "no-store" }),
+        fetch(`/api/photos?eventId=${eventId}&_t=${timestamp}`, { cache: "no-store" })
       ]);
       if (resEvent.ok) {
         const ev = await resEvent.json();
