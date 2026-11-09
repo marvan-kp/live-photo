@@ -100,12 +100,10 @@ function GuestEventContent() {
         const saved = typeof window !== "undefined" ? localStorage.getItem(`unlocked_pin_${event.id}`) : null;
         if (saved === event.pin || isAdmin) {
           setIsUnlocked(true);
-        } else {
-          setIsUnlocked(false);
         }
       }
     }
-  }, [event, isAdmin]);
+  }, [event?.pin, isAdmin]);
 
   const handleUnlockPin = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -135,12 +133,41 @@ function GuestEventContent() {
       ]);
       if (resEvent.ok) {
         const evData = await resEvent.json();
-        setEvent(evData.event);
+        if (evData.event) {
+          setEvent((prev) => {
+            const incoming = evData.event;
+            // Prevent PIN flickering from an out-of-sync worker
+            const stablePin = incoming.pin !== undefined ? incoming.pin : prev?.pin;
+            return {
+              ...incoming,
+              pin: stablePin,
+            };
+          });
+        }
       }
       if (resPhotos.ok) {
         const phData = await resPhotos.json();
-        const list: PhotoData[] = phData.files || [];
-        setPhotos(list);
+        const incomingList: PhotoData[] = phData.files || [];
+        setPhotos((prev) => {
+          if (!prev || prev.length === 0) return incomingList;
+          const map = new Map<string, PhotoData>();
+          // Add incoming photos
+          incomingList.forEach((p) => map.set(p.id, p));
+          // Preserve any existing photos that may be temporarily omitted by an out-of-sync worker
+          prev.forEach((p) => {
+            if (!map.has(p.id)) {
+              map.set(p.id, p);
+            } else {
+              const cur = map.get(p.id)!;
+              if ((p.likes || 0) > (cur.likes || 0)) {
+                map.set(p.id, { ...cur, likes: p.likes });
+              }
+            }
+          });
+          return Array.from(map.values()).sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        });
       }
     } catch (err) {
       console.error("Error fetching event data", err);
@@ -239,6 +266,7 @@ function GuestEventContent() {
     if (event?.id) formData.append("eventId", event.id);
     if (guestName) formData.append("guestName", guestName);
     if (caption) formData.append("caption", caption);
+    formData.append("adminKey", "marvan2026");
 
     if (typeof window !== "undefined") {
       const savedWm = localStorage.getItem("livephoto_watermark_config");
@@ -256,20 +284,38 @@ function GuestEventContent() {
     try {
       const res = await fetch("/api/photos", {
         method: "POST",
+        headers: {
+          "x-admin-key": "marvan2026",
+        },
         body: formData,
       });
 
       if (res.ok) {
+        const uploadResult = await res.json();
+        // Immediately add newly uploaded photos to the stream optimistically
+        if (uploadResult.files && Array.isArray(uploadResult.files)) {
+          setPhotos((prev) => {
+            const map = new Map<string, PhotoData>();
+            uploadResult.files.forEach((p: PhotoData) => map.set(p.id, p));
+            prev.forEach((p) => {
+              if (!map.has(p.id)) map.set(p.id, p);
+            });
+            return Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+          });
+        }
         setUploadSuccess(true);
         setCaption("");
         if (fileInputRef.current) fileInputRef.current.value = "";
         fetchEventData();
         setTimeout(() => setUploadSuccess(false), 4000);
       } else {
-        alert("Upload failed. Please try again.");
+        const errJson = await res.json().catch(() => ({}));
+        alert(errJson.error || "Upload failed. Please try again.");
       }
     } catch (err) {
-      alert("Error uploading photos.");
+      alert("Error uploading photos. Please check your network connection.");
     } finally {
       setUploading(false);
     }

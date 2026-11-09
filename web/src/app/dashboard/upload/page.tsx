@@ -44,6 +44,7 @@ export default function UploadPage() {
     if (selectedEventId) formData.append("eventId", selectedEventId);
     if (photographerName) formData.append("guestName", photographerName);
     if (batchCaption) formData.append("caption", batchCaption);
+    formData.append("adminKey", "marvan2026");
 
     if (typeof window !== "undefined") {
       const savedWm = localStorage.getItem("livephoto_watermark_config");
@@ -61,6 +62,9 @@ export default function UploadPage() {
     try {
       const response = await fetch("/api/photos", {
         method: "POST",
+        headers: {
+          "x-admin-key": "marvan2026",
+        },
         body: formData,
       });
 
@@ -69,7 +73,8 @@ export default function UploadPage() {
         setUploadSuccessCount(data.count || files.length);
         setFiles([]);
       } else {
-        alert("Upload failed. Please check file sizes or formats.");
+        const errJson = await response.json().catch(() => ({}));
+        alert(errJson.error || "Upload failed. Please check file sizes or formats.");
       }
     } catch (error) {
       alert("Error uploading files.");

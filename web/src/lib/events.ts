@@ -35,24 +35,58 @@ const INITIAL_EVENTS: Event[] = [
   }
 ];
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __GLOBAL_EVENTS__: Event[] | undefined;
+}
+
 export function loadEvents(): Event[] {
+  let diskEvents: Event[] = [];
   try {
     if (fs.existsSync(DATA_FILE)) {
       const data = fs.readFileSync(DATA_FILE, 'utf-8');
       const parsed = JSON.parse(data);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        diskEvents = parsed;
       }
     }
   } catch (e) {
     console.warn('Could not read events data file:', e);
   }
-  // Initialize with official Marvan event if completely empty
+
+  const inMemory = globalThis.__GLOBAL_EVENTS__ || [];
+  if (inMemory.length > 0) {
+    const map = new Map<string, Event>();
+    diskEvents.forEach(e => map.set(e.id, e));
+    inMemory.forEach(e => {
+      const existing = map.get(e.id);
+      if (!existing) {
+        map.set(e.id, e);
+      } else {
+        map.set(e.id, {
+          ...existing,
+          ...e,
+          pin: e.pin || existing.pin,
+          photosCount: Math.max(e.photosCount || 0, existing.photosCount || 0),
+        });
+      }
+    });
+    const merged = Array.from(map.values());
+    globalThis.__GLOBAL_EVENTS__ = merged;
+    return merged;
+  }
+
+  if (diskEvents.length > 0) {
+    globalThis.__GLOBAL_EVENTS__ = diskEvents;
+    return diskEvents;
+  }
+
   saveEvents(INITIAL_EVENTS);
   return [...INITIAL_EVENTS];
 }
 
 export function saveEvents(events: Event[]) {
+  globalThis.__GLOBAL_EVENTS__ = events;
   try {
     const dir = path.dirname(DATA_FILE);
     if (!fs.existsSync(dir)) {
@@ -62,6 +96,16 @@ export function saveEvents(events: Event[]) {
   } catch (e) {
     console.warn('Could not save events to disk:', e);
   }
+
+  // Also try saving to process.cwd()/data for local development persistence
+  try {
+    const cwdFile = path.join(process.cwd(), "data", "events.json");
+    if (cwdFile !== DATA_FILE) {
+      const cwdDir = path.dirname(cwdFile);
+      if (!fs.existsSync(cwdDir)) fs.mkdirSync(cwdDir, { recursive: true });
+      fs.writeFileSync(cwdFile, JSON.stringify(events, null, 2), "utf-8");
+    }
+  } catch (_) {}
 }
 
 function generateCode(): string {

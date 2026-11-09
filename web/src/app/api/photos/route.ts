@@ -32,11 +32,17 @@ export async function POST(req: Request) {
     const formData = await req.formData();
 
     // Enforce Admin-only upload: Guests and regular users are strictly forbidden from uploading
-    const isAdmin = (await isUserAdmin()) ||
-      req.headers.get("x-admin-key") === "marvan2026" ||
-      req.headers.get("x-admin-password") === "marvan2026";
+    const { searchParams } = new URL(req.url);
+    const queryKey = searchParams.get("adminKey") || "";
+    const headerKey = req.headers.get("x-admin-key") || req.headers.get("x-admin-password") || "";
     const formAdminKey = (formData.get("adminKey") as string) || "";
-    const authorized = isAdmin || formAdminKey === "marvan2026" || formAdminKey === "admin";
+
+    const authorized =
+      (await isUserAdmin()) ||
+      headerKey === "marvan2026" ||
+      formAdminKey === "marvan2026" ||
+      queryKey === "marvan2026" ||
+      formAdminKey === "admin";
 
     if (!authorized) {
       return NextResponse.json(

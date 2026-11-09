@@ -22,6 +22,11 @@ export interface StoredFile {
 const DATA_FILE = getDataFilePath('photos.json');
 const UPLOADS_DIR = getUploadsDir();
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __GLOBAL_PHOTOS__: StoredFile[] | undefined;
+}
+
 export function loadPhotos(): Map<string, StoredFile> {
   const map = new Map<string, StoredFile>();
   try {
@@ -30,17 +35,30 @@ export function loadPhotos(): Map<string, StoredFile> {
       const parsed: StoredFile[] = JSON.parse(data);
       if (Array.isArray(parsed)) {
         parsed.forEach(p => map.set(p.id, p));
-        return map;
       }
     }
   } catch (e) {
     console.warn('Could not read photos data file:', e);
   }
 
+  // Merge with in-memory global cache across lambda warm invocations
+  const inMemory = globalThis.__GLOBAL_PHOTOS__ || [];
+  inMemory.forEach(p => {
+    if (!map.has(p.id)) {
+      map.set(p.id, p);
+    } else {
+      const existing = map.get(p.id)!;
+      if ((p.likes || 0) > (existing.likes || 0)) {
+        map.set(p.id, { ...existing, likes: p.likes });
+      }
+    }
+  });
+
   return map;
 }
 
 export function savePhotos(photos: StoredFile[]) {
+  globalThis.__GLOBAL_PHOTOS__ = photos;
   try {
     const dir = path.dirname(DATA_FILE);
     if (!fs.existsSync(dir)) {
@@ -50,6 +68,16 @@ export function savePhotos(photos: StoredFile[]) {
   } catch (e) {
     console.warn('Could not save photos to disk:', e);
   }
+
+  // Also try saving to process.cwd()/data for local development persistence
+  try {
+    const cwdFile = path.join(process.cwd(), "data", "photos.json");
+    if (cwdFile !== DATA_FILE) {
+      const cwdDir = path.dirname(cwdFile);
+      if (!fs.existsSync(cwdDir)) fs.mkdirSync(cwdDir, { recursive: true });
+      fs.writeFileSync(cwdFile, JSON.stringify(photos, null, 2), "utf-8");
+    }
+  } catch (_) {}
 }
 
 export async function uploadFileToCloud(

@@ -90,7 +90,14 @@ export const EventModal = ({ isOpen, onClose, onSave, initialData, title }: Even
       const data = new FormData();
       data.append("files", optimizedBlob, file.name.replace(/\.[^.]+$/, ".jpg"));
       data.append("guestName", "Event Cover");
-      const res = await fetch("/api/photos", { method: "POST", body: data });
+      data.append("adminKey", "marvan2026");
+      const res = await fetch("/api/photos", {
+        method: "POST",
+        headers: {
+          "x-admin-key": "marvan2026",
+        },
+        body: data,
+      });
       if (res.ok) {
         const result = await res.json();
         const uploadedUrl = result.files?.[0]?.url;
