@@ -12,10 +12,19 @@ async function getSharp(): Promise<any> {
   }
 }
 
+export type WatermarkPosition =
+  | "bottom-center"
+  | "bottom-right"
+  | "bottom-left"
+  | "center"
+  | "top-center"
+  | "top-right"
+  | "top-left";
+
 export interface WatermarkConfig {
   enabled: boolean;
   logoPath: string;
-  position: "bottom-right" | "bottom-left" | "top-right" | "top-left";
+  position: WatermarkPosition;
   scale: number; // 0.10 to 0.40 (e.g. 0.22 = 22% of photo width)
   opacity: number; // 0.1 to 1.0 (e.g. 0.85)
   margin: number; // margin in pixels
@@ -26,18 +35,28 @@ const CONFIG_FILE = getDataFilePath("watermark_config.json");
 const DEFAULT_CONFIG: WatermarkConfig = {
   enabled: true,
   logoPath: "/signature-marvan-logo.png",
-  position: "bottom-right",
+  position: "bottom-center",
   scale: 0.22,
   opacity: 0.88,
   margin: 28,
 };
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __GLOBAL_WATERMARK_CONFIG__: WatermarkConfig | undefined;
+}
+
 export function getWatermarkConfig(): WatermarkConfig {
+  if (globalThis.__GLOBAL_WATERMARK_CONFIG__) {
+    return { ...globalThis.__GLOBAL_WATERMARK_CONFIG__ };
+  }
   try {
     if (fs.existsSync(CONFIG_FILE)) {
       const data = fs.readFileSync(CONFIG_FILE, "utf-8");
       const parsed = JSON.parse(data);
-      return { ...DEFAULT_CONFIG, ...parsed };
+      const conf = { ...DEFAULT_CONFIG, ...parsed };
+      globalThis.__GLOBAL_WATERMARK_CONFIG__ = conf;
+      return conf;
     }
   } catch (e) {
     console.warn("Could not read watermark_config.json, using default:", e);
@@ -48,6 +67,8 @@ export function getWatermarkConfig(): WatermarkConfig {
 export function saveWatermarkConfig(config: Partial<WatermarkConfig>): WatermarkConfig {
   const current = getWatermarkConfig();
   const updated: WatermarkConfig = { ...current, ...config };
+  globalThis.__GLOBAL_WATERMARK_CONFIG__ = updated;
+
   try {
     const dir = path.dirname(CONFIG_FILE);
     if (!fs.existsSync(dir)) {
@@ -57,6 +78,17 @@ export function saveWatermarkConfig(config: Partial<WatermarkConfig>): Watermark
   } catch (e) {
     console.error("Failed to save watermark config:", e);
   }
+
+  // Also sync to project cwd data directory for permanent seeding across lambdas
+  try {
+    const cwdFile = path.join(process.cwd(), "data", "watermark_config.json");
+    if (cwdFile !== CONFIG_FILE) {
+      const cwdDir = path.dirname(cwdFile);
+      if (!fs.existsSync(cwdDir)) fs.mkdirSync(cwdDir, { recursive: true });
+      fs.writeFileSync(cwdFile, JSON.stringify(updated, null, 2), "utf-8");
+    }
+  } catch (_) {}
+
   return updated;
 }
 
@@ -91,8 +123,13 @@ function resolveLogoBuffer(logoPath: string): Buffer | null {
   return null;
 }
 
-export async function applyWatermark(imageBuffer: Buffer): Promise<Buffer> {
-  const config = getWatermarkConfig();
+export async function applyWatermark(
+  imageBuffer: Buffer,
+  overrides?: Partial<WatermarkConfig>
+): Promise<Buffer> {
+  const baseConfig = getWatermarkConfig();
+  const config: WatermarkConfig = overrides ? { ...baseConfig, ...overrides } : baseConfig;
+
   if (!config.enabled) {
     return imageBuffer;
   }
@@ -145,15 +182,39 @@ export async function applyWatermark(imageBuffer: Buffer): Promise<Buffer> {
     let left = metadata.width - logoW - margin;
     let top = metadata.height - logoH - margin;
 
-    if (config.position === "bottom-left") {
-      left = margin;
-      top = metadata.height - logoH - margin;
-    } else if (config.position === "top-right") {
-      left = metadata.width - logoW - margin;
-      top = margin;
-    } else if (config.position === "top-left") {
-      left = margin;
-      top = margin;
+    switch (config.position) {
+      case "bottom-center":
+        left = Math.round((metadata.width - logoW) / 2);
+        top = metadata.height - logoH - margin;
+        break;
+      case "bottom-left":
+        left = margin;
+        top = metadata.height - logoH - margin;
+        break;
+      case "bottom-right":
+        left = metadata.width - logoW - margin;
+        top = metadata.height - logoH - margin;
+        break;
+      case "center":
+        left = Math.round((metadata.width - logoW) / 2);
+        top = Math.round((metadata.height - logoH) / 2);
+        break;
+      case "top-center":
+        left = Math.round((metadata.width - logoW) / 2);
+        top = margin;
+        break;
+      case "top-left":
+        left = margin;
+        top = margin;
+        break;
+      case "top-right":
+        left = metadata.width - logoW - margin;
+        top = margin;
+        break;
+      default:
+        left = metadata.width - logoW - margin;
+        top = metadata.height - logoH - margin;
+        break;
     }
 
     // Clamp coordinates within image bounds

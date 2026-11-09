@@ -51,6 +51,18 @@ export async function POST(req: Request) {
     const guestName = (formData.get("guestName") as string) || undefined;
     const caption = (formData.get("caption") as string) || undefined;
 
+    // Optional direct client watermark overrides
+    const wmPosOverride = (formData.get("watermarkPosition") as any) || undefined;
+    const wmScaleOverride = formData.get("watermarkScale") ? parseFloat(formData.get("watermarkScale") as string) : undefined;
+    const wmOpacityOverride = formData.get("watermarkOpacity") ? parseFloat(formData.get("watermarkOpacity") as string) : undefined;
+    const wmEnabledOverride = formData.get("watermarkEnabled") !== null ? formData.get("watermarkEnabled") === "true" || formData.get("watermarkEnabled") === "1" : undefined;
+
+    const wmOverrides: any = {};
+    if (wmPosOverride) wmOverrides.position = wmPosOverride;
+    if (wmScaleOverride && !isNaN(wmScaleOverride)) wmOverrides.scale = wmScaleOverride;
+    if (wmOpacityOverride && !isNaN(wmOpacityOverride)) wmOverrides.opacity = wmOpacityOverride;
+    if (wmEnabledOverride !== undefined) wmOverrides.enabled = wmEnabledOverride;
+
     if (!files || files.length === 0) {
       return NextResponse.json({ error: "No files uploaded" }, { status: 400 });
     }
@@ -69,8 +81,8 @@ export async function POST(req: Request) {
       }
 
       // Apply custom studio logo watermark overlay
-      const watermarkedBuffer = await applyWatermark(buffer);
-      const watermarkedThumbBuffer = thumbBuffer ? await applyWatermark(thumbBuffer) : undefined;
+      const watermarkedBuffer = await applyWatermark(buffer, wmOverrides);
+      const watermarkedThumbBuffer = thumbBuffer ? await applyWatermark(thumbBuffer, wmOverrides) : undefined;
 
       const savedFile = await uploadFileToCloud(
         watermarkedBuffer,

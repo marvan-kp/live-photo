@@ -1,0 +1,8 @@
+{
+  "enabled": true,
+  "logoPath": "/signature-marvan-logo.png",
+  "position": "bottom-center",
+  "scale": 0.22,
+  "opacity": 0.88,
+  "margin": 28
+}

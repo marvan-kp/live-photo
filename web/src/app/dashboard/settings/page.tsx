@@ -62,7 +62,7 @@ export default function DashboardSettingsPage() {
 
   // Watermark Settings state
   const [wmEnabled, setWmEnabled] = useState(true);
-  const [wmPosition, setWmPosition] = useState<"bottom-right" | "bottom-left" | "top-right" | "top-left">("bottom-right");
+  const [wmPosition, setWmPosition] = useState<"bottom-center" | "bottom-right" | "bottom-left" | "center" | "top-center" | "top-right" | "top-left">("bottom-center");
   const [wmScale, setWmScale] = useState(0.22);
   const [wmOpacity, setWmOpacity] = useState(0.88);
   const [wmLogoPath, setWmLogoPath] = useState("/signature-marvan-logo.png");
@@ -105,8 +105,26 @@ export default function DashboardSettingsPage() {
       .catch((e) => console.error("Failed to load settings:", e))
       .finally(() => setLoading(false));
 
-    // Fetch watermark settings
-    fetch("/api/watermark")
+    // Fetch watermark settings from localStorage first for instant recall
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("livephoto_watermark_config");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.enabled !== undefined) setWmEnabled(Boolean(parsed.enabled));
+          if (parsed.position) setWmPosition(parsed.position);
+          if (typeof parsed.scale === "number") setWmScale(parsed.scale);
+          if (typeof parsed.opacity === "number") setWmOpacity(parsed.opacity);
+          if (parsed.logoPath) {
+            setWmLogoPath(parsed.logoPath);
+            setWmPreviewUrl(parsed.logoPath);
+          }
+        } catch (_) {}
+      }
+    }
+
+    // Then sync with server
+    fetch(`/api/watermark?_t=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (d.config) {
@@ -136,6 +154,21 @@ export default function DashboardSettingsPage() {
     e.preventDefault();
     setSavingWm(true);
     setWmMessage("");
+
+    // Save to localStorage immediately so client persistence is guaranteed
+    if (typeof window !== "undefined") {
+      localStorage.setItem(
+        "livephoto_watermark_config",
+        JSON.stringify({
+          enabled: wmEnabled,
+          position: wmPosition,
+          scale: wmScale,
+          opacity: wmOpacity,
+          logoPath: wmLogoPath,
+        })
+      );
+    }
+
     try {
       const formData = new FormData();
       formData.append("enabled", String(wmEnabled));
@@ -642,8 +675,11 @@ export default function DashboardSettingsPage() {
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
+                  { id: "bottom-center", label: "Bottom-Center", sub: "Signature (Recommended)" },
                   { id: "bottom-right", label: "Bottom-Right", sub: "Standard" },
                   { id: "bottom-left", label: "Bottom-Left", sub: "Corner" },
+                  { id: "center", label: "Center Overlay", sub: "Protection" },
+                  { id: "top-center", label: "Top-Center", sub: "Banner" },
                   { id: "top-right", label: "Top-Right", sub: "Header" },
                   { id: "top-left", label: "Top-Left", sub: "Badge" },
                 ].map((pos) => {
@@ -750,17 +786,23 @@ export default function DashboardSettingsPage() {
               {wmEnabled && (
                 <div
                   className={`absolute pointer-events-none transition-all duration-300 ${
-                    wmPosition === "bottom-right"
+                    wmPosition === "bottom-center"
+                      ? "bottom-4 left-1/2 -translate-x-1/2"
+                      : wmPosition === "bottom-right"
                       ? "bottom-4 right-4"
                       : wmPosition === "bottom-left"
                       ? "bottom-4 left-4"
+                      : wmPosition === "center"
+                      ? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                      : wmPosition === "top-center"
+                      ? "top-4 left-1/2 -translate-x-1/2"
                       : wmPosition === "top-right"
                       ? "top-4 right-4"
                       : "top-4 left-4"
                   }`}
                   style={{
                     width: `${Math.round(wmScale * 100 * 1.5)}%`,
-                    maxWidth: "60%",
+                    maxWidth: "75%",
                     opacity: wmOpacity,
                   }}
                 >

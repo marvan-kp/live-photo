@@ -240,6 +240,19 @@ function GuestEventContent() {
     if (guestName) formData.append("guestName", guestName);
     if (caption) formData.append("caption", caption);
 
+    if (typeof window !== "undefined") {
+      const savedWm = localStorage.getItem("livephoto_watermark_config");
+      if (savedWm) {
+        try {
+          const parsed = JSON.parse(savedWm);
+          if (parsed.position) formData.append("watermarkPosition", parsed.position);
+          if (parsed.scale) formData.append("watermarkScale", String(parsed.scale));
+          if (parsed.opacity) formData.append("watermarkOpacity", String(parsed.opacity));
+          if (parsed.enabled !== undefined) formData.append("watermarkEnabled", String(parsed.enabled));
+        } catch (_) {}
+      }
+    }
+
     try {
       const res = await fetch("/api/photos", {
         method: "POST",
