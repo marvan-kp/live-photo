@@ -48,6 +48,9 @@ import com.livephotoshare.app.model.Photo
 import com.livephotoshare.app.network.LivePhotoApiClient
 import com.livephotoshare.app.ui.theme.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import java.io.ByteArrayOutputStream
 
 val AI_APP_TAGS = listOf("All", "⭐ Top Liked", "🕒 Recent", "👤 My Uploads", "💃 Dance", "🥂 Toast", "💍 Romance", "✨ Candid")
@@ -76,10 +79,13 @@ fun MainScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     var showAiSelfieDialog by remember { mutableStateOf(false) }
     var selectedPhotoForViewer by remember { mutableStateOf<Photo?>(null) }
-    var isViewerEnhanced by remember { mutableStateOf(false) }
     var editingEventForModal by remember { mutableStateOf<Event?>(null) }
     var eventToDelete by remember { mutableStateOf<Event?>(null) }
     var photoToDelete by remember { mutableStateOf<Photo?>(null) }
+
+    // Live Auto-Upload Mode states
+    var isAutoUploadMode by remember { mutableStateOf(false) }
+    var autoUploadStatus by remember { mutableStateOf<String?>(null) }
 
     // AI Selfie Matching states
     var selfieMatches by remember { mutableStateOf<List<FaceMatch>>(emptyList()) }
@@ -88,7 +94,6 @@ fun MainScreen(
     // Upload staging state
     var stagingImageBytes by remember { mutableStateOf<ByteArray?>(null) }
     var stagingCaption by remember { mutableStateOf("") }
-    var isStagingEnhanced by remember { mutableStateOf(false) }
     var isUploading by remember { mutableStateOf(false) }
 
     // Refresh data
@@ -115,8 +120,21 @@ fun MainScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        refresh()
+    // Real-time live auto-refresh ticker
+    LaunchedEffect(selectedEvent?.id) {
+        refresh(selectedEvent?.id)
+        while (true) {
+            delay(8000L)
+            val active = selectedEvent
+            if (active != null && !isUploading && autoUploadStatus == null) {
+                val resPhotos = client.fetchPhotos(active.id)
+                resPhotos.onSuccess { latest ->
+                    if (latest.size != photos.size || latest.sumOf { it.likes } != photos.sumOf { it.likes }) {
+                        photos = latest
+                    }
+                }
+            }
+        }
     }
 
     // Camera Capture Launcher for photo upload
@@ -125,8 +143,45 @@ fun MainScreen(
     ) { bitmap: Bitmap? ->
         if (bitmap != null) {
             val stream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
-            stagingImageBytes = stream.toByteArray()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 92, stream)
+            val bytes = stream.toByteArray()
+            if (isAutoUploadMode) {
+                val activeEvent = selectedEvent
+                if (activeEvent == null) {
+                    Toast.makeText(context, "⚠️ Please select an event first for Auto-Upload", Toast.LENGTH_SHORT).show()
+                    stagingImageBytes = bytes
+                } else {
+                    autoUploadStatus = "⚡ Auto-uploading camera shot to ${activeEvent.name}..."
+                    Toast.makeText(context, "⚡ Auto-uploading to ${activeEvent.name}...", Toast.LENGTH_SHORT).show()
+                    scope.launch(Dispatchers.IO) {
+                        val fileName = "camera_${System.currentTimeMillis()}.jpg"
+                        val resolvedName = if (client.guestName.isNotBlank() && client.guestName != "Guest") client.guestName else "Photographer"
+                        val res = client.uploadPhoto(
+                            bytes = bytes,
+                            fileName = fileName,
+                            eventId = activeEvent.id,
+                            guestName = resolvedName,
+                            caption = "Live camera shot 📸"
+                        )
+                        withContext(Dispatchers.Main) {
+                            res.onSuccess {
+                                autoUploadStatus = "✓ Live photo auto-uploaded!"
+                                Toast.makeText(context, "✓ Live photo auto-uploaded to ${activeEvent.name}!", Toast.LENGTH_SHORT).show()
+                                refresh(activeEvent.id)
+                                scope.launch {
+                                    delay(3500L)
+                                    autoUploadStatus = null
+                                }
+                            }.onFailure { err ->
+                                autoUploadStatus = "✕ Auto-upload failed: ${err.message}"
+                                Toast.makeText(context, "Upload failed: ${err.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+            } else {
+                stagingImageBytes = bytes
+            }
         }
     }
 
@@ -157,10 +212,46 @@ fun MainScreen(
         if (uri != null) {
             try {
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    stagingImageBytes = inputStream.readBytes()
+                    val bytes = inputStream.readBytes()
+                    if (isAutoUploadMode) {
+                        val activeEvent = selectedEvent
+                        if (activeEvent == null) {
+                            Toast.makeText(context, "⚠️ Please select an event first for Auto-Upload", Toast.LENGTH_SHORT).show()
+                            stagingImageBytes = bytes
+                        } else {
+                            autoUploadStatus = "⚡ Auto-uploading gallery photo to ${activeEvent.name}..."
+                            Toast.makeText(context, "⚡ Auto-uploading to ${activeEvent.name}...", Toast.LENGTH_SHORT).show()
+                            scope.launch(Dispatchers.IO) {
+                                val fileName = "gallery_${System.currentTimeMillis()}.jpg"
+                                val resolvedName = if (client.guestName.isNotBlank() && client.guestName != "Guest") client.guestName else "Photographer"
+                                val res = client.uploadPhoto(
+                                    bytes = bytes,
+                                    fileName = fileName,
+                                    eventId = activeEvent.id,
+                                    guestName = resolvedName,
+                                    caption = "Live gallery upload 📸"
+                                )
+                                withContext(Dispatchers.Main) {
+                                    res.onSuccess {
+                                        autoUploadStatus = "✓ Live photo auto-uploaded!"
+                                        Toast.makeText(context, "✓ Live photo auto-uploaded to ${activeEvent.name}!", Toast.LENGTH_SHORT).show()
+                                        refresh(activeEvent.id)
+                                        scope.launch {
+                                            delay(3500L)
+                                            autoUploadStatus = null
+                                        }
+                                    }.onFailure { err ->
+                                        autoUploadStatus = "✕ Auto-upload failed: ${err.message}"
+                                        Toast.makeText(context, "Upload failed: ${err.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        stagingImageBytes = bytes
+                    }
                 }
-            }
- catch (e: Exception) {
+            } catch (e: Exception) {
                 statusMessage = "Failed to load selected photo"
             }
         }
@@ -612,6 +703,120 @@ fun MainScreen(
                 }
             }
 
+            // ⚡ Live Camera Auto-Upload Mode Toggle
+            Surface(
+                color = if (isAutoUploadMode) GoldAccent.copy(alpha = 0.15f) else GraphiteCard.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isAutoUploadMode) GoldAccent else GlassBorder
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        isAutoUploadMode = !isAutoUploadMode
+                        val active = selectedEvent
+                        if (isAutoUploadMode) {
+                            if (active != null) {
+                                Toast.makeText(context, "⚡ Live Auto-Upload ON: Photos will upload directly to ${active.name}!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "⚡ Live Auto-Upload ON: Please select an event to sync with", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = if (isAutoUploadMode) "⚡" else "💤",
+                            fontSize = 20.sp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (isAutoUploadMode) "Live Auto-Upload: ACTIVE" else "Live Auto-Upload: OFF",
+                                    color = if (isAutoUploadMode) GoldAccent else TextPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                                if (isAutoUploadMode) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        color = GreenSuccess.copy(alpha = 0.25f),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "LIVE",
+                                            color = GreenSuccess,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 9.sp,
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                text = if (isAutoUploadMode) {
+                                    if (selectedEvent != null) "Auto-syncing camera & gallery to \"${selectedEvent!!.name}\"" else "Tap an event above to select destination"
+                                } else {
+                                    "Enable to auto-sync camera shots straight to event cloud"
+                                },
+                                color = TextSecondary,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = isAutoUploadMode,
+                        onCheckedChange = { isAutoUploadMode = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = DarkBackground,
+                            checkedTrackColor = GoldAccent,
+                            uncheckedThumbColor = TextSecondary,
+                            uncheckedTrackColor = MidnightSurface
+                        )
+                    )
+                }
+            }
+
+            if (autoUploadStatus != null) {
+                Surface(
+                    color = GoldAccent.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            color = GoldAccent,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = autoUploadStatus!!,
+                            color = GoldAccent,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
             // AI Face Finder & Camera Buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -641,12 +846,17 @@ fun MainScreen(
                         .weight(1f)
                         .height(50.dp),
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = GraphiteCard),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isAutoUploadMode) GoldAccent.copy(alpha = 0.25f) else GraphiteCard
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isAutoUploadMode) GoldAccent else GlassBorder
+                    )
                 ) {
                     Text(
-                        text = "📷 Snap Photo",
-                        color = TextPrimary,
+                        text = if (isAutoUploadMode) "⚡ Snap & Upload" else "📷 Snap Photo",
+                        color = if (isAutoUploadMode) GoldAccent else TextPrimary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
                     )
@@ -790,7 +1000,6 @@ fun MainScreen(
                                 .aspectRatio(1f)
                                 .clickable {
                                     selectedPhotoForViewer = photo
-                                    isViewerEnhanced = false
                                 },
                             colors = CardDefaults.cardColors(containerColor = GraphiteCard)
                         ) {
@@ -837,6 +1046,8 @@ fun MainScreen(
                                                 color = if (photo.likes > 0) Color(0xFFFF6E8A) else GoldAccent,
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                softWrap = false,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
                                         }
@@ -928,7 +1139,6 @@ fun MainScreen(
                                         .aspectRatio(1f)
                                         .clickable {
                                             selectedPhotoForViewer = match.photo
-                                            isViewerEnhanced = false
                                         },
                                     colors = CardDefaults.cardColors(containerColor = GraphiteCard)
                                 ) {
@@ -1136,15 +1346,9 @@ fun MainScreen(
         }
     }
 
-    // Fullscreen Photo Viewer Dialog with AI Auto-Enhance & Real Like Counter
+    // Fullscreen Photo Viewer Dialog
     if (selectedPhotoForViewer != null) {
         val p = selectedPhotoForViewer!!
-        val enhanceColorFilter = remember {
-            val cm = ColorMatrix().apply {
-                setToSaturation(1.35f)
-            }
-            ColorFilter.colorMatrix(cm)
-        }
 
         Dialog(onDismissRequest = { selectedPhotoForViewer = null }) {
             Surface(
@@ -1154,70 +1358,66 @@ fun MainScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        AsyncImage(
-                            model = p.thumbnailUrl.ifBlank { p.url },
-                            contentDescription = p.name,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(320.dp)
-                                .clip(RoundedCornerShape(16.dp)),
-                            contentScale = ContentScale.Fit,
-                            colorFilter = if (isViewerEnhanced) enhanceColorFilter else null
-                        )
-                        if (isViewerEnhanced) {
-                            Surface(
-                                color = GoldAccent,
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .padding(8.dp)
-                            ) {
+                    // Header with Guest Name, Caption, and Close Button
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = p.guestName,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary,
+                                fontSize = 16.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (p.caption.isNotBlank()) {
                                 Text(
-                                    text = "✨ Studio AI Enhanced",
-                                    color = DarkBackground,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    text = p.caption,
+                                    color = TextSecondary,
+                                    fontSize = 12.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
+                        }
+                        IconButton(
+                            onClick = { selectedPhotoForViewer = null },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(GraphiteCard)
+                                .border(1.dp, GlassBorder, CircleShape)
+                        ) {
+                            Text("✕", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = p.guestName,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        fontSize = 16.sp
+
+                    // Photo Preview
+                    AsyncImage(
+                        model = p.thumbnailUrl.ifBlank { p.url },
+                        contentDescription = p.name,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(340.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(DarkBackground),
+                        contentScale = ContentScale.Fit
                     )
-                    if (p.caption.isNotBlank()) {
-                        Text(text = p.caption, color = TextSecondary, fontSize = 13.sp)
-                    }
 
                     Spacer(modifier = Modifier.height(14.dp))
 
+                    // Action Row: Like & Share & Delete (Admin)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Button(
-                            onClick = { isViewerEnhanced = !isViewerEnhanced },
-                            modifier = Modifier.weight(1.3f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isViewerEnhanced) GoldAccent else GraphiteCard
-                            )
-                        ) {
-                            Text(
-                                text = if (isViewerEnhanced) "✨ Enhanced (ON)" else "✨ AI Enhance",
-                                color = if (isViewerEnhanced) DarkBackground else TextPrimary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
+                        // Like Button with single line and no wrapping
                         Button(
                             onClick = {
                                 val updated = p.copy(likes = p.likes + 1)
@@ -1227,7 +1427,9 @@ fun MainScreen(
                                     client.likePhoto(p.id)
                                 }
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (p.likes > 0) Color(0xFF38151B) else GraphiteCard
@@ -1237,15 +1439,25 @@ fun MainScreen(
                                 if (p.likes > 0) Color(0xFFFF4B6E).copy(alpha = 0.6f) else GlassBorder
                             )
                         ) {
-                            Text(
-                                text = "❤️ (${p.likes})",
-                                color = if (p.likes > 0) Color(0xFFFF6E8A) else TextPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text("❤️", fontSize = 14.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "${p.likes} Likes",
+                                    color = if (p.likes > 0) Color(0xFFFF6E8A) else TextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                         }
 
-                        IconButton(
+                        // Share Button
+                        Button(
                             onClick = {
                                 val sendIntent: Intent = Intent().apply {
                                     action = Intent.ACTION_SEND
@@ -1255,65 +1467,26 @@ fun MainScreen(
                                 val shareIntent = Intent.createChooser(sendIntent, "Share Photo")
                                 context.startActivity(shareIntent)
                             },
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(GraphiteCard)
-                                .border(1.dp, GlassBorder, RoundedCornerShape(12.dp))
+                            modifier = Modifier.height(44.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = GraphiteCard),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)
                         ) {
-                            Text("↗️", fontSize = 14.sp)
+                            Text("↗️ Share", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
 
-                        // 📥 Download button in quick action bar
-                        IconButton(
-                            onClick = {
-                                try {
-                                    val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                                    val downloadUri = Uri.parse(p.url)
-                                    val cleanName = if (p.name.isNotBlank()) p.name else "signature_marvan_${p.id}.jpg"
-                                    val req = DownloadManager.Request(downloadUri).apply {
-                                        setTitle(cleanName)
-                                        setDescription("Downloading full original photo")
-                                        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                        setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, cleanName)
-                                    }
-                                    dm.enqueue(req)
-                                    Toast.makeText(context, "📥 Downloading full original photo to Downloads...", Toast.LENGTH_LONG).show()
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(GoldAccent)
-                                .border(1.dp, GoldAccent, RoundedCornerShape(12.dp))
-                        ) {
-                            Text("📥", fontSize = 14.sp)
-                        }
-
+                        // Delete button (Admin only)
                         if (isAdmin) {
                             IconButton(
                                 onClick = { photoToDelete = p },
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(44.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(Color(0xFF3B1A1A))
                                     .border(1.dp, Color(0xFFFF5555).copy(alpha = 0.5f), RoundedCornerShape(12.dp))
                             ) {
-                                Text("🗑️", fontSize = 14.sp)
+                                Text("🗑️", fontSize = 15.sp)
                             }
-                        }
-
-                        IconButton(
-                            onClick = { selectedPhotoForViewer = null },
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MidnightSurface)
-                                .border(1.dp, GlassBorder, RoundedCornerShape(12.dp))
-                        ) {
-                            Text("✕", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -1337,16 +1510,25 @@ fun MainScreen(
                                 Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = GoldAccent)
                     ) {
-                        Text(
-                            text = "📥 Download Full Size Photo",
-                            color = DarkBackground,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text("📥", fontSize = 16.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Download Full Size Photo",
+                                color = DarkBackground,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -1635,8 +1817,8 @@ fun MainScreen(
 
     // Settings Dialog (Server URL & User Profile)
     if (showSettingsDialog) {
-        var tempUrl by remember { mutableStateOf(client.serverUrl) }
-        var tempGuestName by remember { mutableStateOf(client.guestName) }
+        var tempUrl by remember(showSettingsDialog) { mutableStateOf(client.serverUrl) }
+        var tempGuestName by remember(showSettingsDialog) { mutableStateOf(client.guestName) }
         var testResultText by remember { mutableStateOf<String?>(null) }
         var isTesting by remember { mutableStateOf(false) }
 
@@ -1817,9 +1999,11 @@ fun MainScreen(
 
                         Button(
                             onClick = {
-                                client.serverUrl = tempUrl
+                                val cleanUrl = tempUrl.trim()
+                                client.serverUrl = cleanUrl
                                 client.guestName = tempGuestName.trim()
                                 showSettingsDialog = false
+                                Toast.makeText(context, "Saved server: $cleanUrl", Toast.LENGTH_SHORT).show()
                                 refresh()
                             },
                             modifier = Modifier.weight(1f),

@@ -26,7 +26,7 @@ class LivePhotoApiClient(context: Context) {
     var serverUrl: String
         get() {
             val saved = prefs.getString("server_url", null)
-            if (saved.isNullOrBlank() || saved.contains("10.0.2.2") || saved.contains("192.168.0.103") || saved.contains("localhost")) {
+            if (saved.isNullOrBlank()) {
                 return DEFAULT_CLOUD_URL
             }
             return saved
