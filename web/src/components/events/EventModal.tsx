@@ -14,6 +14,7 @@ export type EventFormData = {
   coverUrl: string;
   description?: string;
   code?: string;
+  pin?: string;
 };
 
 interface EventModalProps {
@@ -75,6 +76,7 @@ export const EventModal = ({ isOpen, onClose, onSave, initialData, title }: Even
     coverUrl: "",
     description: "",
     code: "",
+    pin: "",
   });
   const [uploadingCover, setUploadingCover] = useState(false);
 
@@ -112,6 +114,7 @@ export const EventModal = ({ isOpen, onClose, onSave, initialData, title }: Even
         coverUrl: initialData.coverUrl,
         description: initialData.description || "",
         code: initialData.code || "",
+        pin: initialData.pin || "",
       });
     } else {
       setFormData({
@@ -121,6 +124,7 @@ export const EventModal = ({ isOpen, onClose, onSave, initialData, title }: Even
         coverUrl: "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=1200",
         description: "",
         code: "",
+        pin: "",
       });
     }
   }, [initialData, isOpen]);
@@ -189,6 +193,7 @@ export const EventModal = ({ isOpen, onClose, onSave, initialData, title }: Even
                     className="w-full bg-graphite border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent"
                   />
                 </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase font-semibold text-accent mb-1 tracking-wider">
                     Custom Code
@@ -201,6 +206,21 @@ export const EventModal = ({ isOpen, onClose, onSave, initialData, title }: Even
                     className="w-full bg-graphite border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent font-mono uppercase"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs uppercase font-semibold text-accent mb-1 tracking-wider flex items-center justify-between">
+                    <span>VIP Security PIN</span>
+                    <span className="text-[10px] text-white/50 lowercase">optional</span>
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={formData.pin || ""}
+                    onChange={(e) => setFormData({ ...formData, pin: e.target.value.trim() })}
+                    placeholder="e.g. 2026 (Locks gallery)"
+                    className="w-full bg-graphite border border-accent/40 rounded-xl px-4 py-2.5 text-sm text-accent focus:outline-none focus:border-accent font-mono tracking-widest placeholder:text-white/30 placeholder:tracking-normal"
+                  />
+                </div>
+              </div>
               </div>
 
               <div>

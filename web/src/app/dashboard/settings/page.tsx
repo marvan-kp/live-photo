@@ -16,7 +16,10 @@ import {
   Cpu,
   Smartphone,
   Sparkles,
-  Download
+  Download,
+  Upload,
+  Sliders,
+  Check
 } from "lucide-react";
 import Link from "next/link";
 
@@ -57,6 +60,17 @@ export default function DashboardSettingsPage() {
   const [s3Bucket, setS3Bucket] = useState("live-photos");
   const [s3Region, setS3Region] = useState("auto");
 
+  // Watermark Settings state
+  const [wmEnabled, setWmEnabled] = useState(true);
+  const [wmPosition, setWmPosition] = useState<"bottom-right" | "bottom-left" | "top-right" | "top-left">("bottom-right");
+  const [wmScale, setWmScale] = useState(0.22);
+  const [wmOpacity, setWmOpacity] = useState(0.88);
+  const [wmLogoPath, setWmLogoPath] = useState("/signature-marvan-logo.png");
+  const [wmPreviewUrl, setWmPreviewUrl] = useState("/signature-marvan-logo.png");
+  const [wmFile, setWmFile] = useState<File | null>(null);
+  const [savingWm, setSavingWm] = useState(false);
+  const [wmMessage, setWmMessage] = useState("");
+
   // UI state
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
@@ -90,7 +104,71 @@ export default function DashboardSettingsPage() {
       })
       .catch((e) => console.error("Failed to load settings:", e))
       .finally(() => setLoading(false));
+
+    // Fetch watermark settings
+    fetch("/api/watermark")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.config) {
+          setWmEnabled(Boolean(d.config.enabled));
+          if (d.config.position) setWmPosition(d.config.position);
+          if (typeof d.config.scale === "number") setWmScale(d.config.scale);
+          if (typeof d.config.opacity === "number") setWmOpacity(d.config.opacity);
+          if (d.config.logoPath) {
+            setWmLogoPath(d.config.logoPath);
+            setWmPreviewUrl(d.config.logoPath);
+          }
+        }
+      })
+      .catch((e) => console.error("Failed to load watermark:", e));
   }, []);
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setWmFile(file);
+      const url = URL.createObjectURL(file);
+      setWmPreviewUrl(url);
+    }
+  };
+
+  const handleSaveWatermark = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingWm(true);
+    setWmMessage("");
+    try {
+      const formData = new FormData();
+      formData.append("enabled", String(wmEnabled));
+      formData.append("position", wmPosition);
+      formData.append("scale", String(wmScale));
+      formData.append("opacity", String(wmOpacity));
+      formData.append("adminKey", "marvan2026");
+      if (wmFile) {
+        formData.append("logo", wmFile);
+      }
+
+      const res = await fetch("/api/watermark", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const d = await res.json();
+        if (d.config?.logoPath) {
+          setWmLogoPath(d.config.logoPath);
+          setWmPreviewUrl(d.config.logoPath);
+        }
+        setWmMessage("✓ Watermark branding successfully updated and applied to all live uploads!");
+        setTimeout(() => setWmMessage(""), 5000);
+      } else {
+        setWmMessage("Failed to update watermark branding.");
+      }
+    } catch (err: any) {
+      setWmMessage("Error saving watermark: " + err.message);
+    } finally {
+      setSavingWm(false);
+    }
+  };
 
   const handleTestConnection = async () => {
     setTesting(true);
@@ -487,6 +565,223 @@ export default function DashboardSettingsPage() {
             </GlassButton>
           </div>
         </form>
+      </GlassCard>
+
+      {/* Studio Logo Watermark & Signature Branding Card */}
+      <GlassCard className="p-6 md:p-8 space-y-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/10 pb-6">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-2 rounded-xl bg-accent/20 border border-accent/40 text-accent">
+                <Sparkles className="w-5 h-5" />
+              </span>
+              <h3 className="text-xl font-bold text-white">Studio Logo Watermark & Brand Signature</h3>
+            </div>
+            <p className="text-xs text-white/50 mt-1 max-w-2xl">
+              Burn your transparent studio logo or signature watermark onto every live uploaded photo in real time. Guests view and download photos with your brand protection.
+            </p>
+          </div>
+
+          <label className="flex items-center gap-3 cursor-pointer bg-white/[0.04] px-4 py-2 rounded-2xl border border-white/10 hover:border-accent/40 transition-all">
+            <span className="text-xs font-semibold text-white/80">
+              {wmEnabled ? "Watermark Active" : "Watermark Disabled"}
+            </span>
+            <input
+              type="checkbox"
+              checked={wmEnabled}
+              onChange={(e) => setWmEnabled(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent relative"></div>
+          </label>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Controls Column */}
+          <form onSubmit={handleSaveWatermark} className="lg:col-span-7 space-y-5">
+            {/* Logo File Upload */}
+            <div className="space-y-2">
+              <label className="block text-xs uppercase font-semibold text-accent tracking-wider">
+                Custom Studio Logo (PNG with Transparency Recommended)
+              </label>
+              <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+                <div className="w-20 h-16 rounded-xl bg-black/60 border border-white/10 flex items-center justify-center p-2 overflow-hidden flex-shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={wmPreviewUrl || "/signature-marvan-logo.png"}
+                    alt="Watermark Logo Preview"
+                    className="max-w-full max-h-full object-contain filter drop-shadow"
+                  />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-accent/20 hover:bg-accent/30 border border-accent/40 text-xs font-bold text-accent transition-all">
+                      <Upload className="w-3.5 h-3.5" /> Upload New Logo
+                      <input
+                        type="file"
+                        accept="image/png,image/svg+xml,image/webp"
+                        className="hidden"
+                        onChange={handleLogoFileChange}
+                      />
+                    </label>
+                    {wmFile && (
+                      <span className="text-xs text-emerald-400 font-medium">✓ Selected: {wmFile.name}</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-white/40">
+                    Recommended: White or gold transparent PNG logo (min 400px width).
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Placement Position */}
+            <div className="space-y-2">
+              <label className="block text-xs uppercase font-semibold text-accent tracking-wider">
+                Watermark Position
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { id: "bottom-right", label: "Bottom-Right", sub: "Standard" },
+                  { id: "bottom-left", label: "Bottom-Left", sub: "Corner" },
+                  { id: "top-right", label: "Top-Right", sub: "Header" },
+                  { id: "top-left", label: "Top-Left", sub: "Badge" },
+                ].map((pos) => {
+                  const isSelected = wmPosition === pos.id;
+                  return (
+                    <button
+                      key={pos.id}
+                      type="button"
+                      onClick={() => setWmPosition(pos.id as any)}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        isSelected
+                          ? "bg-accent/20 border-accent text-white shadow-md shadow-accent/10"
+                          : "bg-white/[0.02] border-white/10 text-white/60 hover:border-white/20 hover:text-white"
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{pos.label}</div>
+                      <div className="text-[10px] text-accent/80 font-mono mt-0.5">{pos.sub}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Sliders: Scale & Opacity */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/10 space-y-2">
+                <div className="flex justify-between items-center text-xs font-semibold">
+                  <span className="text-white/80">Logo Size / Scale</span>
+                  <span className="text-accent font-mono">{Math.round(wmScale * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.10"
+                  max="0.38"
+                  step="0.02"
+                  value={wmScale}
+                  onChange={(e) => setWmScale(parseFloat(e.target.value))}
+                  className="w-full accent-accent cursor-pointer"
+                />
+                <p className="text-[10px] text-white/40">Percentage relative to photo width (10% - 38%)</p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/10 space-y-2">
+                <div className="flex justify-between items-center text-xs font-semibold">
+                  <span className="text-white/80">Watermark Opacity</span>
+                  <span className="text-accent font-mono">{Math.round(wmOpacity * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.30"
+                  max="1.0"
+                  step="0.05"
+                  value={wmOpacity}
+                  onChange={(e) => setWmOpacity(parseFloat(e.target.value))}
+                  className="w-full accent-accent cursor-pointer"
+                />
+                <p className="text-[10px] text-white/40">Transparency blend level (30% - 100%)</p>
+              </div>
+            </div>
+
+            {wmMessage && (
+              <div
+                className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                  wmMessage.startsWith("✓")
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                    : "bg-red-500/10 border-red-500/30 text-red-400"
+                }`}
+              >
+                {wmMessage.startsWith("✓") ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                {wmMessage}
+              </div>
+            )}
+
+            <div className="pt-2">
+              <GlassButton
+                type="submit"
+                variant="primary"
+                disabled={savingWm}
+                className="flex items-center gap-2 px-6 py-2.5 text-sm"
+              >
+                {savingWm ? <RefreshCw className="w-4 h-4 animate-spin text-dark" /> : <Save className="w-4 h-4" />}
+                {savingWm ? "Saving Watermark..." : "Save Watermark Branding"}
+              </GlassButton>
+            </div>
+          </form>
+
+          {/* Live Mockup Visualizer Preview */}
+          <div className="lg:col-span-5 space-y-2">
+            <label className="block text-xs uppercase font-semibold text-accent tracking-wider">
+              Live Real-Time Photo Preview
+            </label>
+            <div className="relative aspect-[3/4] w-full rounded-2xl overflow-hidden bg-black/80 border-2 border-accent/30 shadow-2xl group">
+              {/* Sample Portrait Photograph */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=800"
+                alt="Watermark Sample Preview"
+                className="w-full h-full object-cover brightness-90 group-hover:scale-105 transition-transform duration-700"
+              />
+
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+
+              {/* Watermark Overlay in Preview */}
+              {wmEnabled && (
+                <div
+                  className={`absolute pointer-events-none transition-all duration-300 ${
+                    wmPosition === "bottom-right"
+                      ? "bottom-4 right-4"
+                      : wmPosition === "bottom-left"
+                      ? "bottom-4 left-4"
+                      : wmPosition === "top-right"
+                      ? "top-4 right-4"
+                      : "top-4 left-4"
+                  }`}
+                  style={{
+                    width: `${Math.round(wmScale * 100 * 1.5)}%`,
+                    maxWidth: "60%",
+                    opacity: wmOpacity,
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={wmPreviewUrl || "/signature-marvan-logo.png"}
+                    alt="Watermark"
+                    className="w-full h-auto object-contain filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
+                  />
+                </div>
+              )}
+
+              <div className="absolute top-2 left-2 px-2.5 py-1 rounded-md bg-black/70 backdrop-blur border border-white/10 text-[10px] text-white/70 font-mono">
+                {wmEnabled ? `Watermark: ${wmPosition} (${Math.round(wmScale * 100)}% size, ${Math.round(wmOpacity * 100)}% op)` : "Watermark: OFF"}
+              </div>
+            </div>
+            <p className="text-[11px] text-center text-white/40">
+              Interactive preview adjusts instantly as you drag sliders or change placement.
+            </p>
+          </div>
+        </div>
       </GlassCard>
 
       {/* AI Face Engine Status Card */}

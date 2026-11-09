@@ -81,7 +81,8 @@ class LivePhotoApiClient(context: Context) {
                             location = obj.optString("location"),
                             coverUrl = resolvePhotoUrl(obj.optString("coverUrl")),
                             photosCount = obj.optInt("photosCount", 0),
-                            guestsCount = obj.optInt("guestsCount", 0)
+                            guestsCount = obj.optInt("guestsCount", 0),
+                            pin = obj.optString("pin", "")
                         )
                     )
                 }
@@ -115,7 +116,8 @@ class LivePhotoApiClient(context: Context) {
                     location = obj.optString("location"),
                     coverUrl = resolvePhotoUrl(obj.optString("coverUrl")),
                     photosCount = obj.optInt("photosCount", 0),
-                    guestsCount = obj.optInt("guestsCount", 0)
+                    guestsCount = obj.optInt("guestsCount", 0),
+                    pin = obj.optString("pin", "")
                 )
                 Result.success(event)
             }
@@ -240,7 +242,8 @@ class LivePhotoApiClient(context: Context) {
         location: String,
         description: String,
         code: String,
-        coverUrl: String = ""
+        coverUrl: String = "",
+        pin: String = ""
     ): Result<Event> = withContext(Dispatchers.IO) {
         try {
             val payload = JSONObject().apply {
@@ -250,6 +253,7 @@ class LivePhotoApiClient(context: Context) {
                 put("description", description)
                 if (code.isNotBlank()) put("code", code)
                 if (coverUrl.isNotBlank()) put("coverUrl", coverUrl)
+                if (pin.isNotBlank()) put("pin", pin.trim())
             }
 
             val body = payload.toString().toRequestBody("application/json".toMediaTypeOrNull())
@@ -274,7 +278,8 @@ class LivePhotoApiClient(context: Context) {
                     location = obj.optString("location"),
                     coverUrl = resolvePhotoUrl(obj.optString("coverUrl")),
                     photosCount = obj.optInt("photosCount", 0),
-                    guestsCount = obj.optInt("guestsCount", 0)
+                    guestsCount = obj.optInt("guestsCount", 0),
+                    pin = obj.optString("pin", "")
                 )
                 Result.success(event)
             }
@@ -343,7 +348,8 @@ class LivePhotoApiClient(context: Context) {
         date: String,
         location: String,
         description: String,
-        coverUrl: String = ""
+        coverUrl: String = "",
+        pin: String = ""
     ): Result<Event> = withContext(Dispatchers.IO) {
         try {
             val payload = JSONObject().apply {
@@ -352,6 +358,7 @@ class LivePhotoApiClient(context: Context) {
                 put("location", location)
                 put("description", description)
                 if (coverUrl.isNotBlank()) put("coverUrl", coverUrl)
+                if (pin.isNotBlank()) put("pin", pin.trim())
             }
             val body = payload.toString().toRequestBody("application/json".toMediaTypeOrNull())
             val request = Request.Builder()
@@ -375,7 +382,8 @@ class LivePhotoApiClient(context: Context) {
                     location = obj.optString("location"),
                     coverUrl = resolvePhotoUrl(obj.optString("coverUrl")),
                     photosCount = obj.optInt("photosCount", 0),
-                    guestsCount = obj.optInt("guestsCount", 0)
+                    guestsCount = obj.optInt("guestsCount", 0),
+                    pin = obj.optString("pin", "")
                 )
                 Result.success(event)
             }

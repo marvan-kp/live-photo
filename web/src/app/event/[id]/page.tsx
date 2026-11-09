@@ -38,6 +38,7 @@ interface EventData {
   photosCount: number;
   guestsCount: number;
   status: string;
+  pin?: string;
 }
 
 interface PhotoData {
@@ -71,6 +72,9 @@ function GuestEventContent() {
   const [isPhotoEnhanced, setIsPhotoEnhanced] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [enteredPin, setEnteredPin] = useState("");
+  const [pinError, setPinError] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,6 +90,39 @@ function GuestEventContent() {
       if (saved) setGuestName(saved);
     }
   }, []);
+
+  // Check VIP Security PIN lock
+  useEffect(() => {
+    if (event) {
+      if (!event.pin) {
+        setIsUnlocked(true);
+      } else {
+        const saved = typeof window !== "undefined" ? localStorage.getItem(`unlocked_pin_${event.id}`) : null;
+        if (saved === event.pin || isAdmin) {
+          setIsUnlocked(true);
+        } else {
+          setIsUnlocked(false);
+        }
+      }
+    }
+  }, [event, isAdmin]);
+
+  const handleUnlockPin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!event || !event.pin) {
+      setIsUnlocked(true);
+      return;
+    }
+    if (enteredPin.trim() === event.pin.trim()) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`unlocked_pin_${event.id}`, enteredPin.trim());
+      }
+      setIsUnlocked(true);
+      setPinError("");
+    } else {
+      setPinError("Incorrect VIP PIN. Please verify code with event host.");
+    }
+  };
 
   // Fetch event and photos with cache busting
   const fetchEventData = async () => {
@@ -266,6 +303,128 @@ function GuestEventContent() {
     );
   }
 
+  // VIP Security PIN Gate
+  if (event.pin && !isUnlocked && !isAdmin) {
+    return (
+      <main className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Background Cover with heavy blur */}
+        <div className="absolute inset-0 z-0">
+          <Image
+            src={event.coverUrl || "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=1600"}
+            alt={event.name}
+            fill
+            className="object-cover blur-2xl scale-110 brightness-[0.25]"
+          />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
+        </div>
+
+        <GlassCard className="relative z-10 w-full max-w-md p-8 rounded-3xl border-accent/40 shadow-2xl bg-midnight/90 backdrop-blur-xl text-center space-y-6">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-accent/20 border border-accent/50 flex items-center justify-center shadow-lg shadow-accent/20">
+            <Lock className="w-8 h-8 text-accent animate-pulse" />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/20 text-accent text-xs font-semibold uppercase tracking-wider border border-accent/30">
+              <Sparkles className="w-3.5 h-3.5" /> Private VIP Event
+            </div>
+            <h1 className="text-2xl font-bold text-white tracking-tight pt-1">{event.name}</h1>
+            <p className="text-xs text-white/60">
+              This gallery is protected. Please enter the VIP Security PIN provided by your host or photographer.
+            </p>
+          </div>
+
+          <form onSubmit={handleUnlockPin} className="space-y-4">
+            <div className="relative">
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                autoFocus
+                value={enteredPin}
+                onChange={(e) => {
+                  setEnteredPin(e.target.value);
+                  setPinError("");
+                }}
+                placeholder="● ● ● ●"
+                className="w-full text-center text-3xl font-mono tracking-[0.6em] text-accent bg-graphite/80 border-2 border-accent/50 rounded-2xl py-3 px-4 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all placeholder:text-white/20"
+              />
+            </div>
+
+            {pinError && (
+              <p className="text-xs text-red-400 font-medium animate-bounce">{pinError}</p>
+            )}
+
+            {/* Quick Virtual Keypad */}
+            <div className="grid grid-cols-3 gap-2 pt-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => {
+                    if (enteredPin.length < 6) {
+                      setEnteredPin((prev) => prev + num);
+                      setPinError("");
+                    }
+                  }}
+                  className="py-3 rounded-xl bg-white/[0.05] hover:bg-white/10 active:bg-accent/20 border border-white/10 text-lg font-bold text-white transition-all"
+                >
+                  {num}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setEnteredPin("");
+                  setPinError("");
+                }}
+                className="py-3 rounded-xl bg-white/[0.03] hover:bg-white/10 border border-white/5 text-xs font-semibold text-white/60 transition-all"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (enteredPin.length < 6) {
+                    setEnteredPin((prev) => prev + "0");
+                    setPinError("");
+                  }
+                }}
+                className="py-3 rounded-xl bg-white/[0.05] hover:bg-white/10 active:bg-accent/20 border border-white/10 text-lg font-bold text-white transition-all"
+              >
+                0
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEnteredPin((prev) => prev.slice(0, -1));
+                  setPinError("");
+                }}
+                className="py-3 rounded-xl bg-white/[0.03] hover:bg-white/10 border border-white/5 text-sm font-semibold text-white/60 transition-all"
+              >
+                ⌫
+              </button>
+            </div>
+
+            <GlassButton
+              type="submit"
+              variant="primary"
+              className="w-full py-3 text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-accent/20 mt-2"
+            >
+              <Lock className="w-4 h-4" /> Unlock Live Gallery
+            </GlassButton>
+          </form>
+
+          <div className="pt-2 border-t border-white/10 text-xs text-white/40">
+            <Link href="/" className="hover:text-accent transition-colors">
+              ← Return to public events
+            </Link>
+          </div>
+        </GlassCard>
+      </main>
+    );
+  }
+
   const currentUrl = typeof window !== "undefined" ? window.location.href : "";
 
   return (
@@ -283,8 +442,15 @@ function GuestEventContent() {
 
         <div className="absolute inset-x-0 bottom-0 max-w-5xl mx-auto p-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/20 border border-accent/30 text-accent text-xs font-semibold uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" /> Live Photo Sharing
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/20 border border-accent/30 text-accent text-xs font-semibold uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5" /> Live Photo Sharing
+              </div>
+              {event.pin && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold uppercase tracking-wider">
+                  <Lock className="w-3 h-3" /> VIP Protected
+                </div>
+              )}
             </div>
             <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight">{event.name}</h1>
             <div className="flex flex-wrap items-center gap-4 text-sm text-white/70">

@@ -22,7 +22,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, date, location, coverUrl, description, code } = body;
+    const { name, date, location, coverUrl, description, code, pin } = body;
     if (!name || !date || !location) {
       return NextResponse.json({ error: "Missing required fields (name, date, location)" }, { status: 400 });
     }
@@ -33,6 +33,7 @@ export async function POST(req: Request) {
       coverUrl: coverUrl || "",
       description: description || "",
       code: code || undefined,
+      pin: pin ? String(pin).trim() : undefined,
     });
     return NextResponse.json({ event }, { status: 201 });
   } catch (error: any) {

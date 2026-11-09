@@ -13,6 +13,7 @@ export interface Event {
   photosCount: number;
   guestsCount: number;
   status: 'active' | 'upcoming' | 'archived';
+  pin?: string;
   createdAt: string;
 }
 

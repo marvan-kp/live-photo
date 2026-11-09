@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { uploadFileToCloud, listStoredFiles, likePhoto, deleteStoredFile } from "@/lib/storage";
 import { isUserAdmin } from "@/lib/auth";
+import { applyWatermark } from "@/lib/watermark";
 
 export async function GET(req: Request) {
   try {
@@ -67,14 +68,18 @@ export async function POST(req: Request) {
         thumbBuffer = Buffer.from(await thumbFile.arrayBuffer());
       }
 
+      // Apply custom studio logo watermark overlay
+      const watermarkedBuffer = await applyWatermark(buffer);
+      const watermarkedThumbBuffer = thumbBuffer ? await applyWatermark(thumbBuffer) : undefined;
+
       const savedFile = await uploadFileToCloud(
-        buffer,
+        watermarkedBuffer,
         file.name,
         file.type || "image/jpeg",
         eventId,
         guestName,
         caption,
-        thumbBuffer
+        watermarkedThumbBuffer
       );
       uploadedResults.push(savedFile);
     }

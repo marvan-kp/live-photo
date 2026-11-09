@@ -9,7 +9,8 @@ data class Event(
     val location: String = "",
     val coverUrl: String = "",
     val photosCount: Int = 0,
-    val guestsCount: Int = 0
+    val guestsCount: Int = 0,
+    val pin: String = ""
 )
 
 data class Photo(

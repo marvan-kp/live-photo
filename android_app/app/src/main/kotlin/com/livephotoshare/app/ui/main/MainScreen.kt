@@ -40,6 +40,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.livephotoshare.app.R
 import coil.compose.AsyncImage
 import com.livephotoshare.app.model.Event
@@ -82,6 +85,12 @@ fun MainScreen(
     var editingEventForModal by remember { mutableStateOf<Event?>(null) }
     var eventToDelete by remember { mutableStateOf<Event?>(null) }
     var photoToDelete by remember { mutableStateOf<Photo?>(null) }
+
+    // VIP Event Security PIN states
+    val unlockedEventIds = remember { mutableStateListOf<String>() }
+    var pendingPinEvent by remember { mutableStateOf<Event?>(null) }
+    var pinInputText by remember { mutableStateOf("") }
+    var pinInputError by remember { mutableStateOf(false) }
 
     // Live Auto-Upload Mode states
     var isAutoUploadMode by remember { mutableStateOf(false) }
@@ -499,8 +508,14 @@ fun MainScreen(
                                     shape = RoundedCornerShape(18.dp)
                                 )
                                 .clickable {
-                                    selectedEvent = ev
-                                    refresh(ev.id)
+                                    if (ev.pin.isNotBlank() && !isAdmin && !unlockedEventIds.contains(ev.id)) {
+                                        pendingPinEvent = ev
+                                        pinInputText = ""
+                                        pinInputError = false
+                                    } else {
+                                        selectedEvent = ev
+                                        refresh(ev.id)
+                                    }
                                 }
                         ) {
                             Box(modifier = Modifier.fillMaxSize()) {
@@ -548,7 +563,23 @@ fun MainScreen(
                                             )
                                         }
 
-                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            if (ev.pin.isNotBlank()) {
+                                                Surface(
+                                                    color = GoldAccent.copy(alpha = 0.2f),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent.copy(alpha = 0.5f))
+                                                ) {
+                                                    Text(
+                                                        text = "🔒 VIP",
+                                                        color = GoldAccent,
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+
                                             Surface(
                                                 color = MidnightSurface.copy(alpha = 0.9f),
                                                 shape = RoundedCornerShape(6.dp),
@@ -1066,7 +1097,51 @@ fun MainScreen(
 
 
             // Photos Grid
-            if (displayedPhotos.isEmpty() && !isLoading) {
+            val isCurrentEventLocked = selectedEvent?.pin?.isNotBlank() == true && !isAdmin && !unlockedEventIds.contains(selectedEvent!!.id)
+
+            if (isCurrentEventLocked) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth(0.9f)
+                            .background(MidnightSurface, RoundedCornerShape(20.dp))
+                            .border(1.dp, GoldAccent.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                            .padding(24.dp)
+                    ) {
+                        Text("🔒", fontSize = 44.sp)
+                        Text(
+                            text = "Private VIP Event",
+                            fontWeight = FontWeight.Bold,
+                            color = GoldAccent,
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            text = "This live stream is protected by a VIP Security PIN. Enter the PIN to view photos.",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Button(
+                            onClick = {
+                                pendingPinEvent = selectedEvent
+                                pinInputText = ""
+                                pinInputError = false
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldAccent)
+                        ) {
+                            Text("🔑 Enter VIP PIN to Unlock", color = DarkBackground, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+                }
+            } else if (displayedPhotos.isEmpty() && !isLoading) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1742,6 +1817,7 @@ fun MainScreen(
         var newLocation by remember { mutableStateOf("") }
         var newDate by remember { mutableStateOf("2026-11-15") }
         var newCode by remember { mutableStateOf("") }
+        var newPin by remember { mutableStateOf("") }
         var newCoverUrl by remember { mutableStateOf("") }
         var isUploadingCover by remember { mutableStateOf(false) }
         var isCreating by remember { mutableStateOf(false) }
@@ -1809,6 +1885,21 @@ fun MainScreen(
                         value = newCode,
                         onValueChange = { newCode = it.uppercase() },
                         label = { Text("Custom Code (Optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldAccent,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        )
+                    )
+
+                    OutlinedTextField(
+                        value = newPin,
+                        onValueChange = { newPin = it.take(6) },
+                        label = { Text("🔒 VIP Security PIN (Optional)") },
+                        placeholder = { Text("e.g. 2026 (Locks gallery)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -1890,7 +1981,8 @@ fun MainScreen(
                                         location = newLocation,
                                         description = "Created from Android app",
                                         code = newCode,
-                                        coverUrl = newCoverUrl
+                                        coverUrl = newCoverUrl,
+                                        pin = newPin
                                     )
                                     isCreating = false
                                     res.onSuccess { created ->
@@ -2329,6 +2421,7 @@ fun MainScreen(
         var editLocation by remember(targetEvent.id) { mutableStateOf(targetEvent.location) }
         var editDate by remember(targetEvent.id) { mutableStateOf(targetEvent.date) }
         var editDescription by remember(targetEvent.id) { mutableStateOf(targetEvent.description) }
+        var editPin by remember(targetEvent.id) { mutableStateOf(targetEvent.pin) }
         var editCoverUrl by remember(targetEvent.id) { mutableStateOf(targetEvent.coverUrl) }
         var isUploadingEditCover by remember { mutableStateOf(false) }
         var isSaving by remember { mutableStateOf(false) }
@@ -2396,6 +2489,21 @@ fun MainScreen(
                         value = editDescription,
                         onValueChange = { editDescription = it },
                         label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldAccent,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        )
+                    )
+
+                    OutlinedTextField(
+                        value = editPin,
+                        onValueChange = { editPin = it.take(6) },
+                        label = { Text("🔒 VIP Security PIN (Optional)") },
+                        placeholder = { Text("e.g. 2026 (Leave blank for public)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -2477,7 +2585,8 @@ fun MainScreen(
                                         date = editDate,
                                         location = editLocation,
                                         description = editDescription,
-                                        coverUrl = editCoverUrl
+                                        coverUrl = editCoverUrl,
+                                        pin = editPin
                                     )
                                     isSaving = false
                                     res.onSuccess { updated ->
@@ -2650,6 +2759,107 @@ fun MainScreen(
                             } else {
                                 Text("Delete", color = Color(0xFFFF8888), fontWeight = FontWeight.Bold)
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // VIP Event Security PIN Dialog
+    if (pendingPinEvent != null) {
+        val targetPinEvent = pendingPinEvent!!
+        Dialog(onDismissRequest = { pendingPinEvent = null }) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MidnightSurface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("🔒", fontSize = 36.sp)
+                    Text(
+                        text = "VIP Event PIN Required",
+                        fontWeight = FontWeight.Bold,
+                        color = GoldAccent,
+                        fontSize = 17.sp
+                    )
+                    Text(
+                        text = targetPinEvent.name,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Enter the VIP security PIN provided by the event host to unlock this gallery.",
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center
+                    )
+
+                    OutlinedTextField(
+                        value = pinInputText,
+                        onValueChange = {
+                            pinInputText = it.take(6)
+                            pinInputError = false
+                        },
+                        label = { Text("Enter 4-Digit PIN") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.NumberPassword
+                        ),
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GoldAccent,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        )
+                    )
+
+                    if (pinInputError) {
+                        Text(
+                            text = "Incorrect PIN. Please verify code with event host.",
+                            color = Color(0xFFFF5555),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { pendingPinEvent = null },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = GraphiteCard)
+                        ) {
+                            Text("Cancel", color = TextPrimary)
+                        }
+
+                        Button(
+                            onClick = {
+                                if (pinInputText.trim() == targetPinEvent.pin.trim()) {
+                                    if (!unlockedEventIds.contains(targetPinEvent.id)) {
+                                        unlockedEventIds.add(targetPinEvent.id)
+                                    }
+                                    selectedEvent = targetPinEvent
+                                    refresh(targetPinEvent.id)
+                                    pendingPinEvent = null
+                                } else {
+                                    pinInputError = true
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldAccent)
+                        ) {
+                            Text("Unlock", color = DarkBackground, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

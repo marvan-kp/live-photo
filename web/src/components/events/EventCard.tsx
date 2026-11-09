@@ -1,7 +1,7 @@
 "use client";
 
 import { GlassCard } from "@/components/ui/GlassCard";
-import { Calendar, MapPin, Image as ImageIcon, Edit, Trash2, QrCode, ExternalLink, Tv, Download } from "lucide-react";
+import { Calendar, MapPin, Image as ImageIcon, Edit, Trash2, QrCode, ExternalLink, Tv, Download, Lock } from "lucide-react";
 import { Event } from "@/lib/events";
 import Link from "next/link";
 
@@ -57,9 +57,16 @@ export const EventCard = ({ event, onEdit, onDelete }: EventCardProps) => {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-bold text-white truncate pr-2">{event.name}</h3>
-            <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider ${statusColors[event.status] || statusColors.active}`}>
-              {event.status}
-            </span>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {event.pin && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-accent/20 text-accent border border-accent/40 flex items-center gap-1" title={`Protected with VIP PIN: ${event.pin}`}>
+                  <Lock className="w-2.5 h-2.5" /> PIN: {event.pin}
+                </span>
+              )}
+              <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider ${statusColors[event.status] || statusColors.active}`}>
+                {event.status}
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-4 text-xs text-white/60">
