@@ -144,7 +144,13 @@ class LivePhotoApiClient(context: Context) {
                     val rawUrl = obj.optString("url")
                     val rawThumb = obj.optString("thumbnailUrl")
                     val fullUrl = resolvePhotoUrl(rawUrl)
-                    val thumbUrl = if (rawThumb.isNotBlank()) resolvePhotoUrl(rawThumb) else fullUrl
+                    val thumbUrl = if (rawThumb.isNotBlank()) {
+                        resolvePhotoUrl(rawThumb)
+                    } else if (rawUrl.contains("/api/uploads/photo_")) {
+                        resolvePhotoUrl(rawUrl.replace("/api/uploads/", "/api/uploads/thumb_"))
+                    } else {
+                        fullUrl
+                    }
                     list.add(
                         Photo(
                             id = obj.optString("id"),

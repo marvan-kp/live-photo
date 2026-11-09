@@ -18,6 +18,15 @@ export async function GET(
       filePath = path.join(process.cwd(), "public", "uploads", safeName);
     }
 
+    // If requested thumbnail doesn't exist, gracefully fall back to original
+    if (!fs.existsSync(filePath) && safeName.startsWith("thumb_")) {
+      const origName = safeName.replace(/^thumb_/, "");
+      filePath = path.join(getUploadsDir(), origName);
+      if (!fs.existsSync(filePath)) {
+        filePath = path.join(process.cwd(), "public", "uploads", origName);
+      }
+    }
+
     if (!fs.existsSync(filePath)) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
