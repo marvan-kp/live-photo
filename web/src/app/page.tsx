@@ -309,6 +309,10 @@ export default function Home() {
               )}
             </div>
 
+            <p className="text-[11px] text-accent/80 font-mono text-center break-all select-all px-2">
+              {`${getPublicBaseUrl()}/event/${selectedQrEvent.id}`}
+            </p>
+
             <div className="p-3 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-between text-xs">
               <span className="text-white/60">Event Access Code:</span>
               <span className="font-mono font-bold text-accent text-sm">{selectedQrEvent.code}</span>

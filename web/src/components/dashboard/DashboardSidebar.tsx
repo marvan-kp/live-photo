@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 const sidebarItems = [
   { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
   { icon: ImageIcon, label: "Events", href: "/dashboard/events" },
+  { icon: Camera, label: "Live Tether", href: "/dashboard/tether" },
   { icon: Users, label: "Guests", href: "/dashboard/guests" },
   { icon: QrCode, label: "QR Manager", href: "/dashboard/qr" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
