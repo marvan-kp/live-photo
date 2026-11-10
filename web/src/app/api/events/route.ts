@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { createEvent, getEvents } from "@/lib/events";
+import { createEventAsync, getEventsAsync } from "@/lib/events";
 
 export async function GET() {
   try {
-    const events = getEvents();
+    const events = await getEventsAsync();
     return NextResponse.json(
       { events },
       {
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     if (!name || !date || !location) {
       return NextResponse.json({ error: "Missing required fields (name, date, location)" }, { status: 400 });
     }
-    const event = createEvent({
+    const event = await createEventAsync({
       name,
       date,
       location,

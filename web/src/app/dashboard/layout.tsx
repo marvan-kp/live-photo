@@ -37,6 +37,10 @@ export default function DashboardLayout({
               ? "Supabase"
               : stData.config.provider === "s3_r2"
               ? "Cloudflare R2"
+              : stData.config.provider === "vercel_blob"
+              ? "Vercel Blob"
+              : stData.cloudDbHealth?.isPersistent
+              ? "Cloud Sync"
               : "Local"
           );
         }

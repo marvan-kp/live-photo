@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { getDataFilePath, getUploadsDir } from "./paths";
+import { cloudReadConfig, cloudWriteConfig } from "./cloudDb";
+import { fetchFromCloudStorage } from "./cloudStorage";
 
 async function getSharp(): Promise<any> {
   try {
@@ -64,6 +66,18 @@ export function getWatermarkConfig(): WatermarkConfig {
   return { ...DEFAULT_CONFIG };
 }
 
+export async function getWatermarkConfigAsync(): Promise<WatermarkConfig> {
+  try {
+    const cloud = await cloudReadConfig<Partial<WatermarkConfig>>("watermark_config");
+    if (cloud && typeof cloud.enabled === "boolean") {
+      const conf = { ...DEFAULT_CONFIG, ...cloud };
+      globalThis.__GLOBAL_WATERMARK_CONFIG__ = conf;
+      return conf;
+    }
+  } catch (_) {}
+  return getWatermarkConfig();
+}
+
 export function saveWatermarkConfig(config: Partial<WatermarkConfig>): WatermarkConfig {
   const current = getWatermarkConfig();
   const updated: WatermarkConfig = { ...current, ...config };
@@ -89,10 +103,28 @@ export function saveWatermarkConfig(config: Partial<WatermarkConfig>): Watermark
     }
   } catch (_) {}
 
+  cloudWriteConfig("watermark_config", updated).catch(() => {});
   return updated;
 }
 
-function resolveLogoBuffer(logoPath: string): Buffer | null {
+export async function saveWatermarkConfigAsync(config: Partial<WatermarkConfig>): Promise<WatermarkConfig> {
+  const current = await getWatermarkConfigAsync();
+  const updated: WatermarkConfig = { ...current, ...config };
+  saveWatermarkConfig(updated);
+  await cloudWriteConfig("watermark_config", updated);
+  return updated;
+}
+
+async function resolveLogoBufferAsync(logoPath: string): Promise<Buffer | null> {
+  if (logoPath.startsWith("http://") || logoPath.startsWith("https://")) {
+    try {
+      const res = await fetch(logoPath, { cache: "no-store" });
+      if (res.ok) {
+        return Buffer.from(await res.arrayBuffer());
+      }
+    } catch (_) {}
+  }
+
   try {
     // 1. Direct local file path
     if (fs.existsSync(logoPath)) {
@@ -100,7 +132,7 @@ function resolveLogoBuffer(logoPath: string): Buffer | null {
     }
 
     // 2. Public directory (e.g. "/signature-marvan-logo.png")
-    const cleanPublicName = logoPath.replace(/^\//, "");
+    const cleanPublicName = path.basename(logoPath);
     const publicPath = path.join(process.cwd(), "public", cleanPublicName);
     if (fs.existsSync(publicPath)) {
       return fs.readFileSync(publicPath);
@@ -112,7 +144,13 @@ function resolveLogoBuffer(logoPath: string): Buffer | null {
       return fs.readFileSync(uploadsPath);
     }
 
-    // 4. Default fallback logo
+    // 4. Cloud Storage object fallback (for Vercel / R2 / Supabase custom watermark logos)
+    const cloudLogo = await fetchFromCloudStorage(cleanPublicName);
+    if (cloudLogo) {
+      return cloudLogo.buffer;
+    }
+
+    // 5. Default fallback logo
     const defaultLogo = path.join(process.cwd(), "public", "signature-marvan-logo.png");
     if (fs.existsSync(defaultLogo)) {
       return fs.readFileSync(defaultLogo);
@@ -127,7 +165,7 @@ export async function applyWatermark(
   imageBuffer: Buffer,
   overrides?: Partial<WatermarkConfig>
 ): Promise<Buffer> {
-  const baseConfig = getWatermarkConfig();
+  const baseConfig = await getWatermarkConfigAsync();
   const config: WatermarkConfig = overrides ? { ...baseConfig, ...overrides } : baseConfig;
 
   if (!config.enabled) {
@@ -146,7 +184,7 @@ export async function applyWatermark(
       return imageBuffer;
     }
 
-    const logoBuffer = resolveLogoBuffer(config.logoPath);
+    const logoBuffer = await resolveLogoBufferAsync(config.logoPath);
     if (!logoBuffer) {
       return imageBuffer;
     }

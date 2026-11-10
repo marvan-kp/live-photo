@@ -63,7 +63,24 @@ function LiveSlideshowContent() {
       if (resPhotos.ok) {
         const ph = await resPhotos.json();
         const incoming: PhotoData[] = ph.files || [];
-        setPhotos(incoming);
+        setPhotos((prev) => {
+          if (!prev || prev.length === 0) return incoming;
+          const map = new Map<string, PhotoData>();
+          incoming.forEach((p) => map.set(p.id, p));
+          prev.forEach((p) => {
+            if (!map.has(p.id)) {
+              map.set(p.id, p);
+            } else {
+              const cur = map.get(p.id)!;
+              if ((p.likes || 0) > (cur.likes || 0)) {
+                map.set(p.id, { ...cur, likes: p.likes });
+              }
+            }
+          });
+          return Array.from(map.values()).sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        });
 
         // Detect new likes and trigger celebration hearts!
         let hasNewLike = false;

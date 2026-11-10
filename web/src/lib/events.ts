@@ -1,6 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import { getDataFilePath } from './paths';
+import {
+  cloudReadEvents,
+  cloudUpsertEvent,
+  cloudDeleteEvent,
+  cloudWriteAllEvents,
+} from './cloudDb';
 
 export interface Event {
   id: string;
@@ -66,7 +72,7 @@ export function loadEvents(): Event[] {
         map.set(e.id, {
           ...existing,
           ...e,
-          pin: e.pin || existing.pin,
+          pin: e.pin !== undefined ? e.pin : existing.pin,
           photosCount: Math.max(e.photosCount || 0, existing.photosCount || 0),
         });
       }
@@ -97,7 +103,6 @@ export function saveEvents(events: Event[]) {
     console.warn('Could not save events to disk:', e);
   }
 
-  // Also try saving to process.cwd()/data for local development persistence
   try {
     const cwdFile = path.join(process.cwd(), "data", "events.json");
     if (cwdFile !== DATA_FILE) {
@@ -106,6 +111,34 @@ export function saveEvents(events: Event[]) {
       fs.writeFileSync(cwdFile, JSON.stringify(events, null, 2), "utf-8");
     }
   } catch (_) {}
+}
+
+/**
+ * Cloud-backed async reader: Reads directly from active Cloud DB (Upstash KV / Supabase / Blob / R2),
+ * merges cleanly, and falls back to local disk + global cache.
+ */
+export async function loadEventsAsync(): Promise<Event[]> {
+  try {
+    const cloudList = await cloudReadEvents<Event>();
+    if (Array.isArray(cloudList)) {
+      if (cloudList.length > 0) {
+        const sorted = [...cloudList].sort(
+          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        );
+        saveEvents(sorted);
+        return sorted;
+      }
+      // If Cloud DB is connected and completely empty, seed it with current local events
+      const localSeed = loadEvents();
+      if (localSeed.length > 0) {
+        await cloudWriteAllEvents(localSeed);
+      }
+      return localSeed;
+    }
+  } catch (e) {
+    console.warn('Cloud loadEventsAsync fallback:', e);
+  }
+  return loadEvents();
 }
 
 function generateCode(): string {
@@ -125,8 +158,22 @@ export const getEvents = (filter?: { status?: Event['status'] }): Event[] => {
   return events;
 };
 
+export const getEventsAsync = async (filter?: { status?: Event['status'] }): Promise<Event[]> => {
+  const events = await loadEventsAsync();
+  if (filter?.status) {
+    return events.filter(e => e.status === filter.status);
+  }
+  return events;
+};
+
 export const getEventById = (id: string): Event | null => {
   const events = loadEvents();
+  const cleanId = id.trim().toLowerCase();
+  return events.find(e => e.id.toLowerCase() === cleanId || e.code.toLowerCase() === cleanId) || null;
+};
+
+export const getEventByIdAsync = async (id: string): Promise<Event | null> => {
+  const events = await loadEventsAsync();
   const cleanId = id.trim().toLowerCase();
   return events.find(e => e.id.toLowerCase() === cleanId || e.code.toLowerCase() === cleanId) || null;
 };
@@ -143,7 +190,7 @@ export const createEvent = (
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)+/g, '') || 'event';
-  
+
   const id = `${slug}-${Date.now().toString(36)}`;
   const code = eventData.code?.toUpperCase() || generateCode();
 
@@ -160,16 +207,59 @@ export const createEvent = (
 
   events.unshift(newEvent);
   saveEvents(events);
+  cloudUpsertEvent(newEvent).catch(() => {});
+  return newEvent;
+};
+
+export const createEventAsync = async (
+  eventData: Omit<Event, 'id' | 'code' | 'createdAt' | 'photosCount' | 'guestsCount' | 'status'> & { code?: string }
+): Promise<Event> => {
+  const events = await loadEventsAsync();
+  const slug = eventData.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '') || 'event';
+
+  const id = `${slug}-${Date.now().toString(36)}`;
+  const code = eventData.code?.toUpperCase() || generateCode();
+
+  const newEvent: Event = {
+    id,
+    code,
+    createdAt: new Date().toISOString(),
+    ...eventData,
+    coverUrl: eventData.coverUrl || '/logo.png',
+    photosCount: 0,
+    guestsCount: 0,
+    status: 'active'
+  };
+
+  events.unshift(newEvent);
+  saveEvents(events);
+  await cloudUpsertEvent(newEvent);
   return newEvent;
 };
 
 export const updateEvent = (id: string, updates: Partial<Event>): Event | null => {
   const events = loadEvents();
-  const index = events.findIndex(e => e.id === id);
+  const index = events.findIndex(e => e.id === id || e.code === id);
   if (index === -1) return null;
-  
+
   events[index] = { ...events[index], ...updates };
   saveEvents(events);
+  cloudUpsertEvent(events[index]).catch(() => {});
+  return events[index];
+};
+
+export const updateEventAsync = async (id: string, updates: Partial<Event>): Promise<Event | null> => {
+  const events = await loadEventsAsync();
+  const cleanId = id.trim().toLowerCase();
+  const index = events.findIndex(e => e.id.toLowerCase() === cleanId || e.code.toLowerCase() === cleanId);
+  if (index === -1) return null;
+
+  events[index] = { ...events[index], ...updates };
+  saveEvents(events);
+  await cloudUpsertEvent(events[index]);
   return events[index];
 };
 
@@ -178,6 +268,19 @@ export const deleteEvent = (id: string): boolean => {
   const filtered = events.filter(e => e.id !== id && e.code !== id);
   if (filtered.length !== events.length) {
     saveEvents(filtered);
+    cloudDeleteEvent(id).catch(() => {});
+    return true;
+  }
+  return false;
+};
+
+export const deleteEventAsync = async (id: string): Promise<boolean> => {
+  const events = await loadEventsAsync();
+  const target = events.find(e => e.id === id || e.code === id);
+  const filtered = events.filter(e => e.id !== id && e.code !== id);
+  if (filtered.length !== events.length) {
+    saveEvents(filtered);
+    await cloudDeleteEvent(target ? target.id : id);
     return true;
   }
   return false;
@@ -189,5 +292,16 @@ export const incrementPhotoCount = (id: string): void => {
   if (event) {
     event.photosCount = (event.photosCount || 0) + 1;
     saveEvents(events);
+    cloudUpsertEvent(event).catch(() => {});
+  }
+};
+
+export const incrementPhotoCountAsync = async (id: string): Promise<void> => {
+  const events = await loadEventsAsync();
+  const event = events.find(e => e.id === id || e.code === id);
+  if (event) {
+    event.photosCount = (event.photosCount || 0) + 1;
+    saveEvents(events);
+    await cloudUpsertEvent(event);
   }
 };

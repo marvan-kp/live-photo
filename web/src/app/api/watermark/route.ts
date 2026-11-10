@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { getWatermarkConfig, saveWatermarkConfig, WatermarkConfig } from "@/lib/watermark";
-import { getUploadsDir } from "@/lib/paths";
+import { getWatermarkConfigAsync, saveWatermarkConfigAsync, WatermarkConfig } from "@/lib/watermark";
+import { getUploadsDir, isVercelEnv } from "@/lib/paths";
+import { uploadToStorage } from "@/lib/cloudStorage";
 import { isUserAdmin } from "@/lib/auth";
 
 export async function GET() {
   try {
-    const config = getWatermarkConfig();
+    const config = await getWatermarkConfigAsync();
     return NextResponse.json(
       { success: true, config },
       {
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
         if (!isNaN(num) && num >= 0.1 && num <= 1.0) updates.opacity = num;
       }
 
-      // Handle custom logo file upload
+      // Handle custom logo file upload (Cloud-safe on Vercel read-only FS)
       const logoFile = formData.get("logo") as File | null;
       if (logoFile && logoFile.size > 0) {
         const arrayBuf = await logoFile.arrayBuffer();
@@ -71,14 +72,26 @@ export async function POST(req: Request) {
         const ext = path.extname(logoFile.name) || ".png";
         const savedLogoName = `custom_watermark_${Date.now()}${ext}`;
 
-        // Save into static public dir and uploads dir for reliable resolution
-        const publicPath = path.join(process.cwd(), "public", savedLogoName);
-        fs.writeFileSync(publicPath, buf);
+        // Save into static public dir only when local writable
+        if (!isVercelEnv()) {
+          try {
+            const publicPath = path.join(process.cwd(), "public", savedLogoName);
+            fs.writeFileSync(/*turbopackIgnore: true*/ publicPath, buf);
+          } catch (_) {}
+        }
 
-        const uploadsPath = path.join(getUploadsDir(), savedLogoName);
-        fs.writeFileSync(uploadsPath, buf);
+        // Also persist in dynamic uploads dir and active Cloud Storage
+        try {
+          const uploadsPath = path.join(getUploadsDir(), savedLogoName);
+          fs.writeFileSync(/*turbopackIgnore: true*/ uploadsPath, buf);
+        } catch (_) {}
 
-        updates.logoPath = `/${savedLogoName}`;
+        const uploaded = await uploadToStorage(buf, savedLogoName, logoFile.type || "image/png");
+        updates.logoPath = uploaded.url.startsWith("http")
+          ? uploaded.url
+          : isVercelEnv()
+          ? `/api/uploads/${savedLogoName}`
+          : `/${savedLogoName}`;
       }
     } else {
       if (!isAdmin) {
@@ -88,7 +101,7 @@ export async function POST(req: Request) {
       updates = body;
     }
 
-    const updated = saveWatermarkConfig(updates);
+    const updated = await saveWatermarkConfigAsync(updates);
     return NextResponse.json({
       success: true,
       message: "Watermark configuration updated successfully",

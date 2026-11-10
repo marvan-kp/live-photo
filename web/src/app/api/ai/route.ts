@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { matchSelfieToEventPhotos, analyzeScene } from "@/lib/ai";
-import { listStoredFiles } from "@/lib/storage";
+import { listStoredFilesAsync } from "@/lib/storage";
 
 export async function GET(req: Request) {
   try {
@@ -9,7 +9,7 @@ export async function GET(req: Request) {
     const eventId = searchParams.get("eventId") || undefined;
 
     if (action === "highlights") {
-      const photos = listStoredFiles(eventId);
+      const photos = await listStoredFilesAsync(eventId);
       // AI curation: rank by likes + quality criteria
       const highlights = [...photos]
         .sort((a, b) => (b.likes || 0) - (a.likes || 0))

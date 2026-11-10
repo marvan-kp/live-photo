@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { getUploadsDir } from "@/lib/paths";
+import { fetchFromCloudStorage } from "@/lib/cloudStorage";
 
 export async function GET(
   request: Request,
@@ -18,12 +19,36 @@ export async function GET(
       filePath = path.join(process.cwd(), "public", "uploads", safeName);
     }
 
+    // If requested thumbnail doesn't exist locally, try Cloud Storage for the thumbnail first
+    if (!fs.existsSync(filePath)) {
+      const cloudFile = await fetchFromCloudStorage(safeName);
+      if (cloudFile) {
+        return new Response(new Uint8Array(cloudFile.buffer), {
+          headers: {
+            "Content-Type": cloudFile.contentType,
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        });
+      }
+    }
+
     // If requested thumbnail doesn't exist, gracefully fall back to original
     if (!fs.existsSync(filePath) && safeName.startsWith("thumb_")) {
       const origName = safeName.replace(/^thumb_/, "");
       filePath = path.join(getUploadsDir(), origName);
       if (!fs.existsSync(filePath)) {
         filePath = path.join(process.cwd(), "public", "uploads", origName);
+      }
+      if (!fs.existsSync(filePath)) {
+        const cloudOrig = await fetchFromCloudStorage(origName);
+        if (cloudOrig) {
+          return new Response(new Uint8Array(cloudOrig.buffer), {
+            headers: {
+              "Content-Type": cloudOrig.contentType,
+              "Cache-Control": "public, max-age=31536000, immutable",
+            },
+          });
+        }
       }
     }
 

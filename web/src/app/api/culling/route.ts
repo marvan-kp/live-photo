@@ -2,14 +2,21 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import {
-  loadCullingConfig,
-  saveCullingConfig,
-  setPhotoCulling,
+  loadCullingConfigAsync,
+  saveCullingConfigAsync,
+  setPhotoCullingAsync,
   groupAndCullBurstShots,
   analyzeImageQuality,
   CullingConfig,
 } from "@/lib/culling";
-import { loadPhotos, savePhotos, listStoredFiles, deleteStoredFile, StoredFile } from "@/lib/storage";
+import {
+  loadPhotosAsync,
+  savePhotosAsync,
+  listStoredFilesAsync,
+  deleteStoredFile,
+  StoredFile,
+} from "@/lib/storage";
+import { fetchFromCloudStorage } from "@/lib/cloudStorage";
 import { getUploadsDir } from "@/lib/paths";
 import { isUserAdmin } from "@/lib/auth";
 
@@ -18,8 +25,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const eventId = searchParams.get("eventId") || undefined;
 
-    const config = loadCullingConfig();
-    const allPhotos = listStoredFiles(eventId);
+    const config = await loadCullingConfigAsync();
+    const allPhotos = await listStoredFilesAsync(eventId);
 
     const stats = {
       total: allPhotos.length,
@@ -55,13 +62,13 @@ export async function POST(req: Request) {
 
     if (action === "update-config") {
       const newConfig: CullingConfig = body.config;
-      saveCullingConfig(newConfig);
+      await saveCullingConfigAsync(newConfig);
       return NextResponse.json({ success: true, config: newConfig });
     }
 
     if (action === "toggle-photo") {
       const { photoId, isCulled, cullStatus, reason } = body;
-      const updated = setPhotoCulling(photoId, isCulled, cullStatus, reason);
+      const updated = await setPhotoCullingAsync(photoId, isCulled, cullStatus, reason);
       if (!updated) {
         return NextResponse.json({ error: "Photo not found" }, { status: 404 });
       }
@@ -70,14 +77,21 @@ export async function POST(req: Request) {
 
     if (action === "batch-cull") {
       const { eventId, burstWindowSeconds, reanalyze } = body;
-      const photosMap = loadPhotos();
-      let targetPhotos = listStoredFiles(eventId);
+      const photosMap = await loadPhotosAsync();
+      let targetPhotos = await listStoredFilesAsync(eventId);
 
       if (reanalyze) {
         const evaluated: StoredFile[] = [];
         for (const p of targetPhotos) {
           let buf: Buffer | null = null;
-          if (p.url.startsWith("/api/uploads/") || p.url.startsWith("/uploads/")) {
+          if (p.url.startsWith("http://") || p.url.startsWith("https://")) {
+            try {
+              const resp = await fetch(p.url);
+              if (resp.ok) {
+                buf = Buffer.from(await resp.arrayBuffer());
+              }
+            } catch (_) {}
+          } else if (p.url.startsWith("/api/uploads/") || p.url.startsWith("/uploads/")) {
             const filename = path.basename(p.url);
             const tmpPath = path.join(getUploadsDir(), filename);
             const pubPath = path.join(process.cwd(), "public", "uploads", filename);
@@ -85,6 +99,9 @@ export async function POST(req: Request) {
               buf = fs.readFileSync(/*turbopackIgnore: true*/ tmpPath);
             } else if (fs.existsSync(/*turbopackIgnore: true*/ pubPath)) {
               buf = fs.readFileSync(/*turbopackIgnore: true*/ pubPath);
+            } else {
+              const cloudObj = await fetchFromCloudStorage(filename);
+              if (cloudObj) buf = cloudObj.buffer;
             }
           }
           if (buf) {
@@ -105,7 +122,7 @@ export async function POST(req: Request) {
 
       const updatedList = groupAndCullBurstShots(targetPhotos, burstWindowSeconds || 3);
       updatedList.forEach((p) => photosMap.set(p.id, p));
-      savePhotos(Array.from(photosMap.values()));
+      await savePhotosAsync(Array.from(photosMap.values()));
 
       return NextResponse.json({
         success: true,
@@ -116,8 +133,8 @@ export async function POST(req: Request) {
 
     if (action === "approve-all") {
       const { eventId } = body;
-      const photosMap = loadPhotos();
-      const targetPhotos = listStoredFiles(eventId);
+      const photosMap = await loadPhotosAsync();
+      const targetPhotos = await listStoredFilesAsync(eventId);
       for (const p of targetPhotos) {
         photosMap.set(p.id, {
           ...p,
@@ -126,7 +143,7 @@ export async function POST(req: Request) {
           aiReason: "Approved & Published to Live Stream ⭐",
         });
       }
-      savePhotos(Array.from(photosMap.values()));
+      await savePhotosAsync(Array.from(photosMap.values()));
       return NextResponse.json({
         success: true,
         restoredCount: targetPhotos.length,
@@ -135,7 +152,7 @@ export async function POST(req: Request) {
 
     if (action === "batch-delete-culled") {
       const { eventId } = body;
-      const allPhotos = listStoredFiles(eventId);
+      const allPhotos = await listStoredFilesAsync(eventId);
       const culled = allPhotos.filter((p) => p.isCulled);
 
       for (const p of culled) {

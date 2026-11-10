@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { getEventById } from "@/lib/events";
-import { listStoredFiles } from "@/lib/storage";
+import { getEventByIdAsync } from "@/lib/events";
+import { listStoredFilesAsync } from "@/lib/storage";
+import { fetchFromCloudStorage } from "@/lib/cloudStorage";
 import { getUploadsDir } from "@/lib/paths";
 import JSZip from "jszip";
 import fs from "fs";
@@ -12,9 +13,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const event = getEventById(id);
+    const { searchParams } = new URL(req.url);
+    const includeCulled = searchParams.get("includeCulled") === "true";
+
+    const event = await getEventByIdAsync(id);
     const eventName = event ? event.name.replace(/[^a-zA-Z0-9_-]/g, "_") : id;
-    const files = listStoredFiles(id);
+    const allFiles = await listStoredFilesAsync(id);
+    const files = includeCulled ? allFiles : allFiles.filter((f) => !f.isCulled);
 
     if (files.length === 0) {
       return NextResponse.json({ error: "No photos found for this event" }, { status: 404 });
@@ -38,12 +43,19 @@ export async function GET(
             zip.file(cleanFileName, Buffer.from(arrayBuf));
           }
         } else {
-          // Local upload file
+          // Local or /api/uploads proxy file
           const localBasename = path.basename(file.url);
           const diskPath = path.join(uploadsDir, localBasename);
+          const publicPath = path.join(process.cwd(), "public", "uploads", localBasename);
           if (fs.existsSync(diskPath)) {
-            const buf = fs.readFileSync(diskPath);
-            zip.file(cleanFileName, buf);
+            zip.file(cleanFileName, fs.readFileSync(diskPath));
+          } else if (fs.existsSync(publicPath)) {
+            zip.file(cleanFileName, fs.readFileSync(publicPath));
+          } else {
+            const cloudFile = await fetchFromCloudStorage(localBasename);
+            if (cloudFile) {
+              zip.file(cleanFileName, cloudFile.buffer);
+            }
           }
         }
       } catch (err) {

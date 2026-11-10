@@ -3,7 +3,8 @@ import path from "path";
 import os from "os";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { StoredFile, listStoredFiles } from "./storage";
+import { StoredFile, listStoredFilesAsync } from "./storage";
+import { getUploadsDir } from "./paths";
 
 const execFileAsync = promisify(execFile);
 
@@ -83,7 +84,7 @@ export async function matchSelfieToEventPhotos(
   selfieBuffer: Buffer,
   eventId?: string
 ): Promise<FaceMatchResult[]> {
-  const allPhotos = listStoredFiles(eventId);
+  const allPhotos = await listStoredFilesAsync(eventId);
   if (!allPhotos || allPhotos.length === 0) {
     return [];
   }
@@ -100,13 +101,16 @@ export async function matchSelfieToEventPhotos(
       fs.writeFileSync(tempSelfiePath, selfieBuffer);
 
       // 2. Prepare items payload for Python engine
+      const uploadsDir = getUploadsDir();
       const photoItems = allPhotos.map((p) => {
         let localPath: string | undefined = undefined;
         if (p.url.startsWith("/api/uploads/") || p.url.startsWith("/uploads/")) {
           const fileName = path.basename(p.url);
+          const tmpUpload = path.join(uploadsDir, fileName);
           const directPublic = path.join(process.cwd(), "public", "uploads", fileName);
           const rootPublic = path.join(process.cwd(), "..", "web", "public", "uploads", fileName);
-          if (fs.existsSync(directPublic)) localPath = directPublic;
+          if (fs.existsSync(/*turbopackIgnore: true*/ tmpUpload)) localPath = tmpUpload;
+          else if (fs.existsSync(directPublic)) localPath = directPublic;
           else if (fs.existsSync(rootPublic)) localPath = rootPublic;
         }
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { uploadFileToCloud, listStoredFiles, likePhoto, deleteStoredFile } from "@/lib/storage";
+import { uploadFileToCloud, listStoredFilesAsync, likePhotoAsync, deleteStoredFile } from "@/lib/storage";
 import { isUserAdmin } from "@/lib/auth";
 import { applyWatermark } from "@/lib/watermark";
 import { analyzeImageQuality } from "@/lib/culling";
@@ -9,7 +9,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const eventId = searchParams.get("eventId") || undefined;
     const includeCulled = searchParams.get("includeCulled") === "true";
-    let files = listStoredFiles(eventId);
+    let files = await listStoredFilesAsync(eventId);
 
     if (!includeCulled) {
       files = files.filter((f) => !f.isCulled);
@@ -143,7 +143,7 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const { action, photoId } = body;
     if (action === "like" && photoId) {
-      const updated = likePhoto(photoId);
+      const updated = await likePhotoAsync(photoId);
       if (!updated) {
         return NextResponse.json({ error: "Photo not found" }, { status: 404 });
       }

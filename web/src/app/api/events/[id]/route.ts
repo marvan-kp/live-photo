@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Event, getEventById, updateEvent, deleteEvent } from "@/lib/events";
+import { getEventByIdAsync, updateEventAsync, deleteEventAsync } from "@/lib/events";
 import { deletePhotosForEvent } from "@/lib/storage";
 
 export async function GET(
@@ -7,7 +7,7 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
-  const event = getEventById(id);
+  const event = await getEventByIdAsync(id);
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
@@ -29,7 +29,7 @@ export async function PUT(
 ) {
   const { id } = await context.params;
   const body = await request.json();
-  const event = updateEvent(id, body);
+  const event = await updateEventAsync(id, body);
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
@@ -42,7 +42,7 @@ export async function DELETE(
 ) {
   const { id } = await context.params;
   const deletedPhotosCount = await deletePhotosForEvent(id);
-  const success = deleteEvent(id);
+  const success = await deleteEventAsync(id);
   if (!success) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }

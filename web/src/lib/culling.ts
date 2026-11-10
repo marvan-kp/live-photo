@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { getDataFilePath } from "./paths";
-import { StoredFile, loadPhotos, savePhotos } from "./storage";
+import { StoredFile, loadPhotos, savePhotos, loadPhotosAsync, savePhotosAsync } from "./storage";
+import { cloudReadConfig, cloudWriteConfig, cloudUpsertPhoto } from "./cloudDb";
 
 export interface CullingConfig {
   enabled: boolean;
@@ -86,6 +87,25 @@ export function saveCullingConfig(config: CullingConfig): void {
       fs.writeFileSync(cwdFile, JSON.stringify(config, null, 2), "utf-8");
     }
   } catch (_) {}
+
+  cloudWriteConfig("culling_config", config).catch(() => {});
+}
+
+export async function loadCullingConfigAsync(): Promise<CullingConfig> {
+  try {
+    const cloud = await cloudReadConfig<Partial<CullingConfig>>("culling_config");
+    if (cloud && typeof cloud.enabled === "boolean") {
+      const merged = { ...DEFAULT_CULLING_CONFIG, ...cloud };
+      globalThis.__GLOBAL_CULLING_CONFIG__ = merged;
+      return merged;
+    }
+  } catch (_) {}
+  return loadCullingConfig();
+}
+
+export async function saveCullingConfigAsync(config: CullingConfig): Promise<void> {
+  saveCullingConfig(config);
+  await cloudWriteConfig("culling_config", config);
 }
 
 /**
@@ -97,7 +117,8 @@ export async function analyzeImageQuality(
   buffer: Buffer,
   configOverrides?: Partial<CullingConfig>
 ): Promise<ImageQualityAnalysis> {
-  const config = { ...loadCullingConfig(), ...configOverrides };
+  const baseConfig = await loadCullingConfigAsync();
+  const config = { ...baseConfig, ...configOverrides };
 
   if (buffer.length < 512) {
     return {
@@ -373,5 +394,29 @@ export function setPhotoCulling(
 
   photosMap.set(photoId, updated);
   savePhotos(Array.from(photosMap.values()));
+  cloudUpsertPhoto(updated).catch(() => {});
+  return updated;
+}
+
+export async function setPhotoCullingAsync(
+  photoId: string,
+  isCulled: boolean,
+  status?: StoredFile["cullStatus"],
+  reason?: string
+): Promise<StoredFile | null> {
+  const photosMap = await loadPhotosAsync();
+  const photo = photosMap.get(photoId);
+  if (!photo) return null;
+
+  const updated: StoredFile = {
+    ...photo,
+    isCulled,
+    cullStatus: status || (isCulled ? "blurry" : "approved"),
+    aiReason: reason || (isCulled ? "Manually culled by Photographer" : "Approved & Restored ⭐"),
+  };
+
+  photosMap.set(photoId, updated);
+  await savePhotosAsync(Array.from(photosMap.values()));
+  await cloudUpsertPhoto(updated);
   return updated;
 }

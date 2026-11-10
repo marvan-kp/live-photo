@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { listStoredFiles } from "@/lib/storage";
-import { loadEvents } from "@/lib/events";
+import { listStoredFilesAsync } from "@/lib/storage";
+import { loadEventsAsync } from "@/lib/events";
 import { getDataFilePath } from "@/lib/paths";
+import { cloudReadConfig, cloudWriteConfig } from "@/lib/cloudDb";
 import fs from "fs";
 import path from "path";
 
@@ -42,13 +43,29 @@ function saveManualGuests(guests: StoredGuestRecord[]) {
   }
 }
 
+async function loadManualGuestsAsync(): Promise<StoredGuestRecord[]> {
+  try {
+    const cloud = await cloudReadConfig<StoredGuestRecord[]>("manual_guests");
+    if (Array.isArray(cloud)) {
+      saveManualGuests(cloud);
+      return cloud;
+    }
+  } catch (_) {}
+  return loadManualGuests();
+}
+
+async function saveManualGuestsAsync(guests: StoredGuestRecord[]): Promise<void> {
+  saveManualGuests(guests);
+  await cloudWriteConfig("manual_guests", guests);
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const filterEventId = searchParams.get("eventId") || undefined;
     const query = searchParams.get("q")?.toLowerCase().trim() || "";
 
-    const allEvents = loadEvents();
+    const allEvents = await loadEventsAsync();
     const eventMap = new Map<string, { id: string; name: string; code: string }>();
     allEvents.forEach((e) => {
       eventMap.set(e.id.toLowerCase(), { id: e.id, name: e.name, code: e.code });
@@ -58,8 +75,8 @@ export async function GET(req: Request) {
     });
 
     // 1. Gather all photos
-    const allPhotos = listStoredFiles();
-    const manualGuests = loadManualGuests();
+    const allPhotos = await listStoredFilesAsync();
+    const manualGuests = await loadManualGuestsAsync();
 
     // 2. Aggregate guests by name
     const guestMap = new Map<
@@ -219,7 +236,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Guest name is required" }, { status: 400 });
     }
 
-    const manualGuests = loadManualGuests();
+    const manualGuests = await loadManualGuestsAsync();
     const newGuest: StoredGuestRecord = {
       id: `manual_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       name: name.trim(),
@@ -232,7 +249,7 @@ export async function POST(req: Request) {
     };
 
     manualGuests.unshift(newGuest);
-    saveManualGuests(manualGuests);
+    await saveManualGuestsAsync(manualGuests);
 
     return NextResponse.json({
       success: true,
@@ -252,9 +269,9 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Guest ID is required" }, { status: 400 });
     }
 
-    const manualGuests = loadManualGuests();
+    const manualGuests = await loadManualGuestsAsync();
     const filtered = manualGuests.filter((g) => g.id !== id);
-    saveManualGuests(filtered);
+    await saveManualGuestsAsync(filtered);
 
     return NextResponse.json({ success: true, message: "Guest removed successfully" });
   } catch (error: any) {

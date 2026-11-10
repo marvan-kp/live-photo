@@ -1,5 +1,5 @@
 {
-  "provider": "s3_r2",
+  "provider": "local",
   "s3": {
     "endpoint": "https://c9c2513ffb0e7185d74799ecdf4bfdad.r2.cloudflarestorage.com",
     "bucketName": "live-photos",

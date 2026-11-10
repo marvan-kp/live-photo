@@ -18,25 +18,41 @@ import {
   Sparkles,
   Download,
   Upload,
-  Sliders,
-  Check
+  Check,
+  Copy,
+  Zap,
+  Server,
+  ShieldCheck,
+  ArrowUpDown
 } from "lucide-react";
 import Link from "next/link";
 
-interface StorageConfigData {
-  provider: "local" | "supabase" | "s3_r2";
-  supabase?: {
-    url: string;
-    bucket: string;
-    serviceRoleKey: string;
-  };
-  s3?: {
-    endpoint: string;
-    accessKeyId: string;
-    secretAccessKey: string;
-    bucketName: string;
-    region?: string;
-  };
+type ProviderType = "local" | "supabase" | "vercel_blob" | "s3_r2";
+
+interface CloudDbHealth {
+  engine: string;
+  label: string;
+  isPersistent: boolean;
+  kvConfigured: boolean;
+  supabaseConfigured: boolean;
+  supabasePostgresReady: boolean;
+  blobConfigured: boolean;
+  r2Configured: boolean;
+}
+
+interface CloudSyncStats {
+  eventsCount: number;
+  photosCount: number;
+  localEventsCount: number;
+  localPhotosCount: number;
+}
+
+interface EnvDetected {
+  vercel: boolean;
+  kvEnv: boolean;
+  blobEnv: boolean;
+  supabaseEnv: boolean;
+  r2Env: boolean;
 }
 
 interface TestResult {
@@ -46,7 +62,10 @@ interface TestResult {
 }
 
 export default function DashboardSettingsPage() {
-  const [provider, setProvider] = useState<"local" | "supabase" | "s3_r2">("local");
+  const [provider, setProvider] = useState<ProviderType>("local");
+
+  // Vercel Blob field
+  const [blobToken, setBlobToken] = useState("");
 
   // Supabase fields
   const [supabaseUrl, setSupabaseUrl] = useState("");
@@ -59,6 +78,21 @@ export default function DashboardSettingsPage() {
   const [s3SecretKey, setS3SecretKey] = useState("");
   const [s3Bucket, setS3Bucket] = useState("live-photos");
   const [s3Region, setS3Region] = useState("auto");
+  const [s3PublicUrl, setS3PublicUrl] = useState("");
+
+  // Cloud DB Sync / Upstash KV / Supabase SQL state
+  const [kvUrl, setKvUrl] = useState("");
+  const [kvToken, setKvToken] = useState("");
+  const [cloudDbHealth, setCloudDbHealth] = useState<CloudDbHealth | null>(null);
+  const [syncStats, setSyncStats] = useState<CloudSyncStats | null>(null);
+  const [envDetected, setEnvDetected] = useState<EnvDetected | null>(null);
+  const [supabaseSql, setSupabaseSql] = useState("");
+  const [showSqlBox, setShowSqlBox] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
+  const [kvTesting, setKvTesting] = useState(false);
+  const [kvSaving, setKvSaving] = useState(false);
+  const [syncingCloud, setSyncingCloud] = useState(false);
+  const [cloudSyncMsg, setCloudSyncMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   // Watermark Settings state
   const [wmEnabled, setWmEnabled] = useState(true);
@@ -78,13 +112,29 @@ export default function DashboardSettingsPage() {
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const loadCloudSyncStatus = async () => {
+    try {
+      const res = await fetch(`/api/cloud-sync?_t=${Date.now()}`, { cache: "no-store" });
+      if (res.ok) {
+        const d = await res.json();
+        if (d.cloudDbHealth) setCloudDbHealth(d.cloudDbHealth);
+        if (d.stats) setSyncStats(d.stats);
+        if (d.envDetected) setEnvDetected(d.envDetected);
+        if (d.supabaseSql) setSupabaseSql(d.supabaseSql);
+      }
+    } catch (e) {
+      console.error("Failed to load cloud sync telemetry:", e);
+    }
+  };
+
   // Fetch current settings on load
   useEffect(() => {
-    fetch("/api/settings")
+    fetch(`/api/settings?_t=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
         if (data.config) {
           setProvider(data.config.provider || "local");
+          if (data.config.blobToken) setBlobToken(data.config.blobToken);
           if (data.config.supabase) {
             setSupabaseUrl(data.config.supabase.url || "");
             setSupabaseKey(data.config.supabase.serviceRoleKey || "");
@@ -96,14 +146,24 @@ export default function DashboardSettingsPage() {
             setS3SecretKey(data.config.s3.secretAccessKey || "");
             setS3Bucket(data.config.s3.bucketName || "live-photos");
             setS3Region(data.config.s3.region || "auto");
+            setS3PublicUrl(data.config.s3.publicUrl || "");
+          }
+          if (data.config.kv) {
+            setKvUrl(data.config.kv.url || "");
+            setKvToken(data.config.kv.token || "");
           }
         }
         if (data.testResult) {
           setTestResult(data.testResult);
         }
+        if (data.cloudDbHealth) {
+          setCloudDbHealth(data.cloudDbHealth);
+        }
       })
       .catch((e) => console.error("Failed to load settings:", e))
       .finally(() => setLoading(false));
+
+    loadCloudSyncStatus();
 
     // Fetch watermark settings from localStorage first for instant recall
     if (typeof window !== "undefined") {
@@ -203,6 +263,73 @@ export default function DashboardSettingsPage() {
     }
   };
 
+  const handleTestKv = async () => {
+    setKvTesting(true);
+    setCloudSyncMsg(null);
+    try {
+      const res = await fetch("/api/cloud-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-key": "marvan2026" },
+        body: JSON.stringify({ action: "test-kv", url: kvUrl, token: kvToken }),
+      });
+      const d = await res.json();
+      setCloudSyncMsg({ ok: Boolean(d.success), text: d.message || (d.success ? "KV connected!" : "KV failed.") });
+    } catch (e: any) {
+      setCloudSyncMsg({ ok: false, text: e.message });
+    } finally {
+      setKvTesting(false);
+    }
+  };
+
+  const handleSaveKv = async () => {
+    setKvSaving(true);
+    setCloudSyncMsg(null);
+    try {
+      const res = await fetch("/api/cloud-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-key": "marvan2026" },
+        body: JSON.stringify({ action: "save-kv", url: kvUrl, token: kvToken }),
+      });
+      const d = await res.json();
+      if (d.cloudDbHealth) setCloudDbHealth(d.cloudDbHealth);
+      setCloudSyncMsg({ ok: Boolean(d.success), text: d.message || "KV configuration updated." });
+      await loadCloudSyncStatus();
+    } catch (e: any) {
+      setCloudSyncMsg({ ok: false, text: e.message });
+    } finally {
+      setKvSaving(false);
+    }
+  };
+
+  const handleCloudSyncAction = async (action: "push-local-to-cloud" | "pull-cloud-to-local") => {
+    setSyncingCloud(true);
+    setCloudSyncMsg(null);
+    try {
+      const res = await fetch("/api/cloud-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-key": "marvan2026" },
+        body: JSON.stringify({ action, migrateMedia: true }),
+      });
+      const d = await res.json();
+      if (d.cloudDbHealth) setCloudDbHealth(d.cloudDbHealth);
+      setCloudSyncMsg({ ok: Boolean(d.success), text: d.message || "Sync operation complete." });
+      await loadCloudSyncStatus();
+    } catch (e: any) {
+      setCloudSyncMsg({ ok: false, text: e.message });
+    } finally {
+      setSyncingCloud(false);
+    }
+  };
+
+  const handleCopySql = async () => {
+    if (!supabaseSql) return;
+    try {
+      await navigator.clipboard.writeText(supabaseSql);
+      setCopiedSql(true);
+      setTimeout(() => setCopiedSql(false), 2500);
+    } catch (_) {}
+  };
+
   const handleTestConnection = async () => {
     setTesting(true);
     setTestResult(null);
@@ -211,6 +338,7 @@ export default function DashboardSettingsPage() {
       const payload = {
         action: "test-only",
         provider,
+        blobToken,
         supabase: {
           url: supabaseUrl,
           serviceRoleKey: supabaseKey,
@@ -222,6 +350,11 @@ export default function DashboardSettingsPage() {
           secretAccessKey: s3SecretKey,
           bucketName: s3Bucket,
           region: s3Region,
+          publicUrl: s3PublicUrl,
+        },
+        kv: {
+          url: kvUrl,
+          token: kvToken,
         },
       };
 
@@ -248,6 +381,7 @@ export default function DashboardSettingsPage() {
     try {
       const payload = {
         provider,
+        blobToken,
         supabase: {
           url: supabaseUrl,
           serviceRoleKey: supabaseKey,
@@ -259,6 +393,11 @@ export default function DashboardSettingsPage() {
           secretAccessKey: s3SecretKey,
           bucketName: s3Bucket,
           region: s3Region,
+          publicUrl: s3PublicUrl,
+        },
+        kv: {
+          url: kvUrl,
+          token: kvToken,
         },
       };
 
@@ -274,6 +413,10 @@ export default function DashboardSettingsPage() {
         if (data.testResult) {
           setTestResult(data.testResult);
         }
+        if (data.cloudDbHealth) {
+          setCloudDbHealth(data.cloudDbHealth);
+        }
+        await loadCloudSyncStatus();
         setTimeout(() => setSaveSuccess(false), 4000);
       } else {
         alert(`Error saving settings: ${data.error || "Unknown error"}`);
@@ -291,12 +434,195 @@ export default function DashboardSettingsPage() {
       <div>
         <h2 className="text-2xl font-bold text-white flex items-center gap-3">
           <Cloud className="w-7 h-7 text-accent" />
-          Cloud Storage & System Settings
+          Cloud Storage, Database Sync &amp; Studio Settings
         </h2>
         <p className="text-white/60 text-sm mt-1">
-          Configure cloud photo storage, verify AI facial recognition pipelines, and manage system integrations.
+          Configure permanent multi-device Cloud DB sync, cloud photo storage, studio watermark branding, and AI pipelines.
         </p>
       </div>
+
+      {/* Live Cloud Database Sync Telemetry & Quick Migration Card */}
+      <GlassCard className="p-6 space-y-5 border-accent/20">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <Server className="w-5 h-5 text-accent" />
+              <h3 className="text-lg font-semibold text-white">Cloud Database Sync Status</h3>
+              {cloudDbHealth && (
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border ${
+                    cloudDbHealth.isPersistent
+                      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                      : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      cloudDbHealth.isPersistent ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
+                    }`}
+                  />
+                  {cloudDbHealth.label}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-white/55">
+              Keeps all events, uploaded photos, VIP PINs, likes, culling decisions, and watermarks permanently synced across Vercel instances &amp; Android apps.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <GlassButton
+              type="button"
+              variant="secondary"
+              onClick={() => handleCloudSyncAction("pull-cloud-to-local")}
+              disabled={syncingCloud}
+              className="flex items-center gap-1.5 text-xs px-3 py-2"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncingCloud ? "animate-spin text-accent" : ""}`} />
+              Refresh from Cloud
+            </GlassButton>
+            <GlassButton
+              type="button"
+              variant="primary"
+              onClick={() => handleCloudSyncAction("push-local-to-cloud")}
+              disabled={syncingCloud}
+              className="flex items-center gap-1.5 text-xs px-3.5 py-2"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5" />
+              {syncingCloud ? "Syncing..." : "Push Local → Cloud DB"}
+            </GlassButton>
+          </div>
+        </div>
+
+        {/* Metrics & Detected Environment Indicators */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/10">
+            <div className="text-[11px] text-white/45">Synced Events</div>
+            <div className="text-xl font-bold text-white mt-0.5">{syncStats?.eventsCount ?? "—"}</div>
+          </div>
+          <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/10">
+            <div className="text-[11px] text-white/45">Synced Photos</div>
+            <div className="text-xl font-bold text-white mt-0.5">{syncStats?.photosCount ?? "—"}</div>
+          </div>
+          <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/10">
+            <div className="text-[11px] text-white/45">Atomic KV / Postgres</div>
+            <div className="text-xs font-semibold mt-1.5">
+              {cloudDbHealth?.kvConfigured ? (
+                <span className="text-emerald-400">✓ Upstash KV Active</span>
+              ) : cloudDbHealth?.supabasePostgresReady ? (
+                <span className="text-emerald-400">✓ Supabase SQL Active</span>
+              ) : (
+                <span className="text-white/50">Manifest / Ephemeral Mode</span>
+              )}
+            </div>
+          </div>
+          <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/10">
+            <div className="text-[11px] text-white/45">Vercel Env Auto-Detect</div>
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${envDetected?.kvEnv ? "bg-emerald-500/20 text-emerald-400" : "bg-white/5 text-white/35"}`}>KV</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${envDetected?.blobEnv ? "bg-emerald-500/20 text-emerald-400" : "bg-white/5 text-white/35"}`}>Blob</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${envDetected?.supabaseEnv ? "bg-emerald-500/20 text-emerald-400" : "bg-white/5 text-white/35"}`}>Supa</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${envDetected?.r2Env ? "bg-emerald-500/20 text-emerald-400" : "bg-white/5 text-white/35"}`}>R2</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Upstash Redis / Vercel KV Atomic Connection Section */}
+        <div className="p-4 rounded-2xl bg-black/30 border border-white/10 space-y-3">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-accent uppercase tracking-wider">
+              <Zap className="w-4 h-4" />
+              Upstash Redis / Vercel KV REST Sync (Recommended for Instant Serverless Atomic Sync)
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSqlBox((s) => !s)}
+              className="text-xs text-accent hover:underline flex items-center gap-1"
+            >
+              <Database className="w-3.5 h-3.5" />
+              {showSqlBox ? "Hide Supabase SQL Schema" : "Optional: View Supabase Postgres SQL Schema"}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input
+              type="url"
+              placeholder="KV_REST_API_URL (https://xxx.upstash.io)"
+              value={kvUrl}
+              onChange={(e) => setKvUrl(e.target.value)}
+              className="w-full bg-black/50 border border-white/10 rounded-xl px-3.5 py-2.5 text-white placeholder-white/30 focus:outline-none focus:border-accent text-xs font-mono"
+            />
+            <input
+              type="password"
+              placeholder="KV_REST_API_TOKEN (Upstash REST Token)"
+              value={kvToken}
+              onChange={(e) => setKvToken(e.target.value)}
+              className="w-full bg-black/50 border border-white/10 rounded-xl px-3.5 py-2.5 text-white placeholder-white/30 focus:outline-none focus:border-accent text-xs font-mono"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <GlassButton
+              type="button"
+              variant="secondary"
+              onClick={handleTestKv}
+              disabled={kvTesting}
+              className="text-xs px-3 py-1.5 flex items-center gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${kvTesting ? "animate-spin text-accent" : ""}`} />
+              {kvTesting ? "Testing KV..." : "Test KV Connection"}
+            </GlassButton>
+            <GlassButton
+              type="button"
+              variant="primary"
+              onClick={handleSaveKv}
+              disabled={kvSaving}
+              className="text-xs px-3.5 py-1.5 flex items-center gap-1.5"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              {kvSaving ? "Saving KV..." : "Save & Activate KV Sync"}
+            </GlassButton>
+            <span className="text-[11px] text-white/45">
+              Works alongside any image bucket below, or add <code className="text-accent">KV_REST_API_URL</code> &amp; <code className="text-accent">KV_REST_API_TOKEN</code> in Vercel Environment Variables.
+            </span>
+          </div>
+        </div>
+
+        {/* Optional Supabase PostgreSQL SQL Box */}
+        {showSqlBox && supabaseSql && (
+          <div className="p-4 rounded-2xl bg-black/50 border border-accent/25 space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-semibold text-accent">
+                Run in Supabase SQL Editor (optional — upgrades Supabase from Storage JSON Sync to atomic PostgreSQL tables)
+              </span>
+              <button
+                type="button"
+                onClick={handleCopySql}
+                className="px-2.5 py-1 rounded-lg bg-accent/20 hover:bg-accent/30 text-accent text-xs font-semibold flex items-center gap-1"
+              >
+                {copiedSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedSql ? "Copied SQL!" : "Copy SQL"}
+              </button>
+            </div>
+            <pre className="text-[11px] text-emerald-300/90 font-mono bg-black/60 p-3 rounded-xl overflow-x-auto border border-white/10">
+              {supabaseSql}
+            </pre>
+          </div>
+        )}
+
+        {cloudSyncMsg && (
+          <div
+            className={`p-3.5 rounded-xl border text-xs flex items-center gap-2 ${
+              cloudSyncMsg.ok
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                : "bg-red-500/10 border-red-500/30 text-red-400"
+            }`}
+          >
+            {cloudSyncMsg.ok ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+            <span>{cloudSyncMsg.text}</span>
+          </div>
+        )}
+      </GlassCard>
 
       {saveSuccess && (
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3 text-emerald-400">
@@ -345,7 +671,7 @@ export default function DashboardSettingsPage() {
           </ol>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Local Storage */}
           <div
             onClick={() => setProvider("local")}
@@ -365,9 +691,9 @@ export default function DashboardSettingsPage() {
             </div>
             <h4 className="font-semibold text-white">Local Storage</h4>
             <p className="text-xs text-white/50 mt-1">
-              Zero-config high performance local filesystem storage. Perfect for local servers & development.
+              Zero-config local filesystem storage for local studio servers.
             </p>
-            <div className="mt-3 text-[11px] text-accent/80 font-mono">100% Free · No API Key</div>
+            <div className="mt-3 text-[11px] text-accent/80 font-mono">Local Server Only</div>
           </div>
 
           {/* Supabase Storage */}
@@ -389,9 +715,33 @@ export default function DashboardSettingsPage() {
             </div>
             <h4 className="font-semibold text-white">Supabase Cloud</h4>
             <p className="text-xs text-white/50 mt-1">
-              Global CDN bucket with direct public URLs and 1GB free tier included on Supabase.
+              CDN photo bucket + automatic Cloud DB sync (zero-SQL or Postgres).
             </p>
-            <div className="mt-3 text-[11px] text-accent/80 font-mono">Free 1GB Cloud Storage</div>
+            <div className="mt-3 text-[11px] text-accent/80 font-mono">Free 1GB + DB Sync</div>
+          </div>
+
+          {/* Vercel Blob */}
+          <div
+            onClick={() => setProvider("vercel_blob")}
+            className={`p-5 rounded-2xl border cursor-pointer transition-all ${
+              provider === "vercel_blob"
+                ? "bg-accent/10 border-accent text-white shadow-lg shadow-accent/10"
+                : "bg-white/[0.02] border-white/10 text-white/60 hover:border-white/20 hover:text-white"
+            }`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <Zap className={`w-6 h-6 ${provider === "vercel_blob" ? "text-accent" : "text-white/50"}`} />
+              {provider === "vercel_blob" && (
+                <span className="text-xs px-2.5 py-1 rounded-full bg-accent/20 text-accent font-medium border border-accent/30">
+                  Active
+                </span>
+              )}
+            </div>
+            <h4 className="font-semibold text-white">Vercel Blob CDN</h4>
+            <p className="text-xs text-white/50 mt-1">
+              1-click native Vercel edge storage + global manifest DB sync.
+            </p>
+            <div className="mt-3 text-[11px] text-accent/80 font-mono">BLOB_READ_WRITE_TOKEN</div>
           </div>
 
           {/* Cloudflare R2 / S3 */}
@@ -413,7 +763,7 @@ export default function DashboardSettingsPage() {
             </div>
             <h4 className="font-semibold text-white">Cloudflare R2 / S3</h4>
             <p className="text-xs text-white/50 mt-1">
-              Zero egress fee cloud object storage with S3 compatible API. 10GB free tier.
+              Zero egress fee S3 object storage with AWS SigV4 + JSON manifest sync.
             </p>
             <div className="mt-3 text-[11px] text-accent/80 font-mono">Free 10GB S3/R2 Tier</div>
           </div>
@@ -428,8 +778,31 @@ export default function DashboardSettingsPage() {
                 Local Storage is fully ready to store live guest uploads
               </div>
               <p className="text-xs text-white/50">
-                Uploaded files are saved to <code className="text-accent bg-black/40 px-1.5 py-0.5 rounded">public/uploads/</code> and streamed through the high-performance dynamic endpoint <code className="text-accent bg-black/40 px-1.5 py-0.5 rounded">/api/uploads/[filename]</code>.
+                Uploaded files are saved locally and streamed through <code className="text-accent bg-black/40 px-1.5 py-0.5 rounded">/api/uploads/[filename]</code>. On Vercel, connect Supabase, Vercel Blob, or Cloudflare R2 above for permanent storage across restarts.
               </p>
+            </div>
+          )}
+
+          {provider === "vercel_blob" && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-white/70 space-y-1">
+                <p className="font-semibold text-white">1-Click Vercel Integration:</p>
+                <p>
+                  In Vercel Dashboard → your project → <strong>Storage</strong> → Create <strong>Blob</strong> store. Vercel automatically sets <code className="text-accent">BLOB_READ_WRITE_TOKEN</code>, or you can paste the token below.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-1.5">
+                  Vercel Blob Read/Write Token {envDetected?.blobEnv && <span className="text-emerald-400 text-xs">(✓ Auto-detected in Vercel Env)</span>}
+                </label>
+                <input
+                  type="password"
+                  placeholder="vercel_blob_rw_xxxxxxxxxxxxxxxx"
+                  value={blobToken}
+                  onChange={(e) => setBlobToken(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-accent text-sm font-mono"
+                />
+              </div>
             </div>
           )}
 
@@ -547,6 +920,36 @@ export default function DashboardSettingsPage() {
                     onChange={(e) => setS3SecretKey(e.target.value)}
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-accent text-sm font-mono"
                     required={provider === "s3_r2"}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-white/80 mb-1.5">
+                    Public CDN URL (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://pub-xxxxxxxx.r2.dev"
+                    value={s3PublicUrl}
+                    onChange={(e) => setS3PublicUrl(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-accent text-sm"
+                  />
+                  <span className="text-xs text-white/40 mt-1 block">
+                    If omitted, photos automatically stream securely via <code className="text-accent">/api/uploads/[filename]</code>.
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white/80 mb-1.5">
+                    Region
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="auto"
+                    value={s3Region}
+                    onChange={(e) => setS3Region(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-accent text-sm font-mono"
                   />
                 </div>
               </div>

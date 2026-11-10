@@ -1,41 +1,63 @@
 import { NextResponse } from "next/server";
 import { getStorageConfig, saveStorageConfig, testStorageConnection, StorageConfig } from "@/lib/cloudStorage";
+import { getCloudHealthReport } from "@/lib/cloudDb";
+
+function maskSecret(val?: string, prefix = 6, suffix = 4): string {
+  if (!val) return "";
+  if (val.length <= prefix + suffix) return "••••••••";
+  return `${val.substring(0, prefix)}...${val.slice(-suffix)}`;
+}
 
 export async function GET() {
   try {
     const config = getStorageConfig();
-    const testResult = await testStorageConnection(config);
+    const [testResult, cloudDbHealth] = await Promise.all([
+      testStorageConnection(config),
+      getCloudHealthReport(),
+    ]);
 
     // Mask secret keys for security in client UI
     const maskedConfig = {
       provider: config.provider,
+      blobToken: maskSecret(config.blobToken, 12, 4),
       supabase: config.supabase
         ? {
             url: config.supabase.url,
             bucket: config.supabase.bucket,
-            serviceRoleKey: config.supabase.serviceRoleKey
-              ? `${config.supabase.serviceRoleKey.substring(0, 6)}...${config.supabase.serviceRoleKey.slice(-4)}`
-              : "",
+            serviceRoleKey: maskSecret(config.supabase.serviceRoleKey, 6, 4),
           }
         : undefined,
       s3: config.s3
         ? {
             endpoint: config.s3.endpoint,
-            accessKeyId: config.s3.accessKeyId
-              ? `${config.s3.accessKeyId.substring(0, 4)}...${config.s3.accessKeyId.slice(-4)}`
-              : "",
+            accessKeyId: maskSecret(config.s3.accessKeyId, 4, 4),
             secretAccessKey: config.s3.secretAccessKey ? "••••••••••••" : "",
             bucketName: config.s3.bucketName,
             region: config.s3.region || "auto",
+            publicUrl: config.s3.publicUrl || "",
+          }
+        : undefined,
+      kv: config.kv
+        ? {
+            url: config.kv.url,
+            token: maskSecret(config.kv.token, 6, 4),
           }
         : undefined,
     };
 
-    return NextResponse.json({
-      success: true,
-      config: maskedConfig,
-      testResult,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        config: maskedConfig,
+        testResult,
+        cloudDbHealth,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        },
+      }
+    );
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
@@ -44,71 +66,92 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { provider, supabase, s3, action } = body;
+    const { provider, supabase, s3, blobToken, kv, action } = body;
 
     const currentConfig = getStorageConfig();
 
-    if (action === "test-only") {
-      // Test without saving
-      const tempConfig: StorageConfig = {
+    const resolveSecret = (incoming?: string, existing?: string) => {
+      if (!incoming) return existing || "";
+      if (incoming.includes("...") || incoming.includes("•")) return existing || "";
+      return incoming.trim();
+    };
+
+    const buildMergedConfig = (): StorageConfig => {
+      const next: StorageConfig = {
+        ...currentConfig,
         provider: provider || "local",
-        supabase: supabase?.url ? {
-          url: supabase.url,
-          bucket: supabase.bucket || "live-photos",
-          serviceRoleKey: supabase.serviceRoleKey || currentConfig.supabase?.serviceRoleKey || "",
-        } : undefined,
-        s3: s3?.endpoint ? {
-          endpoint: s3.endpoint,
-          accessKeyId: s3.accessKeyId || currentConfig.s3?.accessKeyId || "",
-          secretAccessKey: s3.secretAccessKey || currentConfig.s3?.secretAccessKey || "",
-          bucketName: s3.bucketName || "live-photos",
-          region: s3.region || "auto"
-        } : undefined
       };
 
+      if (blobToken !== undefined) {
+        next.blobToken = resolveSecret(blobToken, currentConfig.blobToken) || undefined;
+      }
+
+      if (supabase) {
+        next.supabase = {
+          url: supabase.url?.trim() || currentConfig.supabase?.url || "",
+          bucket: supabase.bucket?.trim() || currentConfig.supabase?.bucket || "live-photos",
+          serviceRoleKey: resolveSecret(supabase.serviceRoleKey, currentConfig.supabase?.serviceRoleKey),
+        };
+      }
+
+      if (s3) {
+        next.s3 = {
+          endpoint: s3.endpoint?.trim() || currentConfig.s3?.endpoint || "",
+          bucketName: s3.bucketName?.trim() || currentConfig.s3?.bucketName || "live-photos",
+          region: s3.region?.trim() || currentConfig.s3?.region || "auto",
+          publicUrl: s3.publicUrl?.trim() ?? currentConfig.s3?.publicUrl ?? "",
+          accessKeyId: resolveSecret(s3.accessKeyId, currentConfig.s3?.accessKeyId),
+          secretAccessKey: resolveSecret(s3.secretAccessKey, currentConfig.s3?.secretAccessKey),
+        };
+      }
+
+      if (kv) {
+        const kvUrl = kv.url?.trim() || "";
+        const kvToken = resolveSecret(kv.token, currentConfig.kv?.token);
+        if (kvUrl && kvToken) {
+          next.kv = { url: kvUrl, token: kvToken };
+        }
+      }
+
+      return next;
+    };
+
+    if (action === "test-only") {
+      const tempConfig = buildMergedConfig();
       const testResult = await testStorageConnection(tempConfig);
       return NextResponse.json({ success: testResult.success, testResult });
     }
 
-    // Save configuration
-    const newConfig: StorageConfig = {
-      provider: provider || "local",
-    };
-
-    if (provider === "supabase" && supabase) {
-      newConfig.supabase = {
-        url: supabase.url?.trim() || "",
-        bucket: supabase.bucket?.trim() || "live-photos",
-        // Keep existing secret if user didn't change masked string
-        serviceRoleKey:
-          supabase.serviceRoleKey && !supabase.serviceRoleKey.includes("...")
-            ? supabase.serviceRoleKey.trim()
-            : currentConfig.supabase?.serviceRoleKey || "",
-      };
-    } else if (provider === "s3_r2" && s3) {
-      newConfig.s3 = {
-        endpoint: s3.endpoint?.trim() || "",
-        bucketName: s3.bucketName?.trim() || "live-photos",
-        region: s3.region?.trim() || "auto",
-        accessKeyId:
-          s3.accessKeyId && !s3.accessKeyId.includes("...")
-            ? s3.accessKeyId.trim()
-            : currentConfig.s3?.accessKeyId || "",
-        secretAccessKey:
-          s3.secretAccessKey && !s3.secretAccessKey.includes("•")
-            ? s3.secretAccessKey.trim()
-            : currentConfig.s3?.secretAccessKey || "",
-      };
-    }
-
+    const newConfig = buildMergedConfig();
     saveStorageConfig(newConfig);
-    const testResult = await testStorageConnection(newConfig);
+
+    const [testResult, cloudDbHealth] = await Promise.all([
+      testStorageConnection(newConfig),
+      getCloudHealthReport(),
+    ]);
 
     return NextResponse.json({
       success: true,
       message: "Storage configuration updated successfully!",
-      config: newConfig,
+      config: {
+        ...newConfig,
+        blobToken: maskSecret(newConfig.blobToken, 12, 4),
+        supabase: newConfig.supabase
+          ? { ...newConfig.supabase, serviceRoleKey: maskSecret(newConfig.supabase.serviceRoleKey, 6, 4) }
+          : undefined,
+        s3: newConfig.s3
+          ? {
+              ...newConfig.s3,
+              accessKeyId: maskSecret(newConfig.s3.accessKeyId, 4, 4),
+              secretAccessKey: newConfig.s3.secretAccessKey ? "••••••••••••" : "",
+            }
+          : undefined,
+        kv: newConfig.kv
+          ? { url: newConfig.kv.url, token: maskSecret(newConfig.kv.token, 6, 4) }
+          : undefined,
+      },
       testResult,
+      cloudDbHealth,
     });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
