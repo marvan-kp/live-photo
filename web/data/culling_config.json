@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "autoHideCulled": true,
+  "sharpnessThreshold": 40,
+  "blinkDetection": true,
+  "burstDeduplication": true,
+  "burstWindowSeconds": 3,
+  "strictness": "balanced"
+}

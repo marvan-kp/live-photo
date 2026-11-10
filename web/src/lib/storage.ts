@@ -17,6 +17,11 @@ export interface StoredFile {
   guestName?: string;
   caption?: string;
   likes: number;
+  qualityScore?: number;
+  cullStatus?: 'approved' | 'blurry' | 'blink' | 'duplicate' | 'underexposed' | 'overexposed';
+  isCulled?: boolean;
+  aiReason?: string;
+  burstGroupId?: string;
 }
 
 const DATA_FILE = getDataFilePath('photos.json');
@@ -87,7 +92,13 @@ export async function uploadFileToCloud(
   eventId?: string,
   guestName?: string,
   caption?: string,
-  thumbnailBuffer?: Buffer | Uint8Array
+  thumbnailBuffer?: Buffer | Uint8Array,
+  qualityData?: {
+    qualityScore?: number;
+    cullStatus?: 'approved' | 'blurry' | 'blink' | 'duplicate' | 'underexposed' | 'overexposed';
+    isCulled?: boolean;
+    aiReason?: string;
+  }
 ): Promise<StoredFile> {
   const fileId = `photo_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   const cleanExt = path.extname(fileName) || '.jpg';
@@ -121,7 +132,11 @@ export async function uploadFileToCloud(
     eventId: eventId || 'marvan-live-2026',
     guestName: guestName || 'Guest',
     caption: caption || '',
-    likes: 0
+    likes: 0,
+    qualityScore: qualityData?.qualityScore ?? 85,
+    cullStatus: qualityData?.cullStatus ?? 'approved',
+    isCulled: qualityData?.isCulled ?? false,
+    aiReason: qualityData?.aiReason ?? 'Crisp Focus & Great Moment ⭐'
   };
 
   const map = loadPhotos();

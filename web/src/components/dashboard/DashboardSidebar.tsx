@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Camera, LayoutDashboard, Image as ImageIcon, Users, Settings, LogOut, QrCode } from "lucide-react";
+import { Camera, LayoutDashboard, Image as ImageIcon, Users, Settings, LogOut, QrCode, ScanEye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -9,6 +9,7 @@ const sidebarItems = [
   { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
   { icon: ImageIcon, label: "Events", href: "/dashboard/events" },
   { icon: Camera, label: "Live Tether", href: "/dashboard/tether" },
+  { icon: ScanEye, label: "AI Culling", href: "/dashboard/culling" },
   { icon: Users, label: "Guests", href: "/dashboard/guests" },
   { icon: QrCode, label: "QR Manager", href: "/dashboard/qr" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },

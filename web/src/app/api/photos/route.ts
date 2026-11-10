@@ -2,12 +2,19 @@ import { NextResponse } from "next/server";
 import { uploadFileToCloud, listStoredFiles, likePhoto, deleteStoredFile } from "@/lib/storage";
 import { isUserAdmin } from "@/lib/auth";
 import { applyWatermark } from "@/lib/watermark";
+import { analyzeImageQuality } from "@/lib/culling";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const eventId = searchParams.get("eventId") || undefined;
-    const files = listStoredFiles(eventId);
+    const includeCulled = searchParams.get("includeCulled") === "true";
+    let files = listStoredFiles(eventId);
+
+    if (!includeCulled) {
+      files = files.filter((f) => !f.isCulled);
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -86,6 +93,17 @@ export async function POST(req: Request) {
         thumbBuffer = Buffer.from(await thumbFile.arrayBuffer());
       }
 
+      // AI Smart Culling & Quality Analysis (Skip for Event Cover uploads)
+      const bypassCulling = (formData.get("bypassCulling") as string) === "true" || guestName === "Event Cover";
+      const quality = bypassCulling
+        ? {
+            qualityScore: 95,
+            cullStatus: "approved" as const,
+            isCulled: false,
+            aiReason: "Verified Event Asset ⭐",
+          }
+        : await analyzeImageQuality(buffer);
+
       // Apply custom studio logo watermark overlay
       const watermarkedBuffer = await applyWatermark(buffer, wmOverrides);
       const watermarkedThumbBuffer = thumbBuffer ? await applyWatermark(thumbBuffer, wmOverrides) : undefined;
@@ -97,7 +115,13 @@ export async function POST(req: Request) {
         eventId,
         guestName,
         caption,
-        watermarkedThumbBuffer
+        watermarkedThumbBuffer,
+        {
+          qualityScore: quality.qualityScore,
+          cullStatus: quality.cullStatus,
+          isCulled: quality.isCulled,
+          aiReason: quality.aiReason,
+        }
       );
       uploadedResults.push(savedFile);
     }

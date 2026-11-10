@@ -42,6 +42,9 @@ interface UploadLog {
   previewUrl?: string;
   sizeKb?: number;
   error?: string;
+  qualityScore?: number;
+  isCulled?: boolean;
+  cullStatus?: string;
 }
 
 export default function CameraTetherPage() {
@@ -139,10 +142,19 @@ export default function CameraTetherPage() {
       const latency = Math.round(performance.now() - startTime);
 
       if (res.ok) {
+        const resJson = await res.json().catch(() => ({}));
+        const uploadedFile = resJson?.files?.[0];
         setLogs((prev) =>
           prev.map((l) =>
             l.id === logId
-              ? { ...l, status: "success", latencyMs: latency }
+              ? {
+                  ...l,
+                  status: "success",
+                  latencyMs: latency,
+                  qualityScore: uploadedFile?.qualityScore,
+                  isCulled: uploadedFile?.isCulled,
+                  cullStatus: uploadedFile?.cullStatus,
+                }
               : l
           )
         );
@@ -559,11 +571,20 @@ export default function CameraTetherPage() {
                             </span>
                           )}
                           {log.status === "success" && (
-                            <div className="text-right">
-                              <span className="flex items-center gap-1 text-emerald-400 font-bold">
+                            <div className="text-right space-y-0.5">
+                              <span
+                                className={`flex items-center justify-end gap-1 font-bold ${
+                                  log.isCulled ? "text-amber-400" : "text-emerald-400"
+                                }`}
+                              >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
-                                Live ({log.latencyMs}ms)
+                                {log.isCulled ? `Culled (${log.cullStatus})` : `Live (${log.latencyMs}ms)`}
                               </span>
+                              {typeof log.qualityScore === "number" && (
+                                <p className="text-[10px] text-white/50 font-mono">
+                                  AI Quality: {log.qualityScore}%
+                                </p>
+                              )}
                             </div>
                           )}
                           {log.status === "error" && (
@@ -640,3 +661,4 @@ export default function CameraTetherPage() {
     </div>
   );
 }
+
