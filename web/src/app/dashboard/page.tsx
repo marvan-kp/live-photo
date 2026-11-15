@@ -156,9 +156,19 @@ export default function DashboardOverviewPage() {
                 </Link>
                 <Link href={`/event/${event.id}/live`} target="_blank">
                   <button className="w-full py-2 px-3 rounded-lg bg-accent/20 hover:bg-accent/30 text-accent text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-accent/30">
-                    <Tv className="w-3.5 h-3.5" /> Live Projector
+                    <Tv className="w-3.5 h-3.5" /> Projector
                   </button>
                 </Link>
+                <Link href={`/dashboard/reels?eventId=${event.id}`}>
+                  <button className="w-full py-2 px-3 rounded-lg bg-white/5 hover:bg-accent/20 text-white/85 hover:text-accent text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-white/10">
+                    <Clapperboard className="w-3.5 h-3.5 text-accent" /> 9:16 Reel
+                  </button>
+                </Link>
+                <a href={`/api/events/${event.id}/download`} download>
+                  <button className="w-full py-2 px-3 rounded-lg bg-white/5 hover:bg-white/15 text-white/80 hover:text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-white/10">
+                    <Upload className="w-3.5 h-3.5 text-accent rotate-180" /> ZIP Download
+                  </button>
+                </a>
               </div>
             </GlassCard>
           ))}
