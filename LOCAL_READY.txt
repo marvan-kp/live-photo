@@ -1,20 +1,31 @@
-Live Photo Share - 100% Fully Functional with Free AI Suite!
+Live Photo Share - 100% Fully Functional with Liquid Glass Premium Suite!
 
 Website: http://localhost:3000
-AI Face Search: http://localhost:3000/ai-search
-APK Download: http://localhost:3000/download
-Direct APK Link: http://localhost:3000/apk/live-photo-share.apk
+Production: https://web-rho-sage-25.vercel.app
+AI Face Search: https://web-rho-sage-25.vercel.app/ai-search
+APK Download: https://web-rho-sage-25.vercel.app/download
+Direct APK Link: https://web-rho-sage-25.vercel.app/apk/live-photo-share.apk
 
 Updated Release APK:
 - Path: D:\code\Live_photo_share\android_app\app\build\outputs\apk\release\app-release.apk
 - Web Public Path: D:\code\Live_photo_share\web\public\apk\live-photo-share.apk
-- Size: 8.75 MB (8,750,063 bytes)
+- Size: 9.08 MB (9,083,751 bytes)
 - Package: com.livephotoshare.app
 - Signed: Yes (Release ready)
 
-AI Features Working on BOTH App & Website:
-1. "Find My Photos" Selfie Biometric Face Matcher (100% Free)
-2. AI Magic Auto-Enhance (Contrast, vibrance & clarity optimization)
-3. AI Auto-Caption & Hashtag Generator
-4. AI Scene & Mood Filter Chips (Highlights, Dance, Toast, Romance, Sunset)
-5. Live Projector Slideshow & Instant QR Scanner
+Key Fixes & Features Delivered:
+1. Storage Selection & Persistence:
+   - Fixed provider selection persistence via Cloud DB sync (`saveStorageConfigAsync` & `getStorageConfigAsync`).
+   - Eliminated provider hijacking; `config.provider` strictly honored with resilient fallback to local disk.
+   - Cleared test connection anomalies for "Local Storage".
+2. Photo Upload Pipeline:
+   - Fixed cover photo upload authorization (`x-admin-key: marvan2026`).
+   - Defaulted AI culling auto-hide to `false` (`autoHideCulled: false`), ensuring all newly uploaded photos are immediately visible in the event gallery stream.
+3. Liquid Glass Premium Design:
+   - Deep obsidian/midnight backdrop (`#0A0B10`), champagne gold accents (`#D4B77A`), specular highlight borders (`#FFFFFF`/15%), and ultra-smooth frosted cards.
+4. Feature Parity Across Android App & Next.js Web:
+   - 9:16 Instagram Story & Reel Studio (Ken Burns zoom/pan, 3 templates, ambient procedural synth).
+   - Fullscreen Live Stage Wall Projector with rotating slides and live QR codes.
+   - AI Culling & Sharpness Analyzer (Laplacian variance + contrast + exposure scoring).
+   - Studio Watermark Studio with real-time preview and multi-positioning.
+   - VIP PIN Lock security, Instant QR Scanner, and Master ZIP export.
