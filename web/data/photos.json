@@ -9,7 +9,7 @@
     "provider": "local_file",
     "eventId": "sample2-mw80dckt",
     "guestName": "Android Guest",
-    "caption": "Heartfelt cheers and wonderful memories \ud83e\udd42\u2764\ufe0f #Celebration2026",
+    "caption": "Heartfelt cheers and wonderful memories 🥂❤️ #Celebration2026",
     "likes": 0,
     "thumbnailUrl": "/api/uploads/thumb_photo_1794153072566_ua16u2n_mobile_1794153067937.jpg"
   },
@@ -51,8 +51,26 @@
     "provider": "local_file",
     "eventId": "sample2-mw80dckt",
     "guestName": "Android Guest",
-    "caption": "Heartfelt cheers and wonderful memories \ud83e\udd42\u2764\ufe0f #Celebration2026",
+    "caption": "Heartfelt cheers and wonderful memories 🥂❤️ #Celebration2026",
     "likes": 4,
     "thumbnailUrl": "/api/uploads/thumb_photo_1794154773707_1el0091_mobile_1794154764914.jpg"
+  },
+  {
+    "id": "photo_1794721451706_tp7enos",
+    "name": "test_photo.jpg",
+    "url": "/api/uploads/photo_1794721451706_tp7enos_test_photo.jpg",
+    "thumbnailUrl": "/api/uploads/photo_1794721451706_tp7enos_test_photo.jpg",
+    "size": 37,
+    "mimeType": "image/jpeg",
+    "createdAt": "2026-11-15T05:44:11.817Z",
+    "provider": "local_file",
+    "eventId": "marvan-live-2026",
+    "guestName": "Test User",
+    "caption": "Testing upload functionality",
+    "likes": 0,
+    "qualityScore": 85,
+    "cullStatus": "approved",
+    "isCulled": false,
+    "aiReason": "Crisp Focus & Great Moment ⭐"
   }
 ]

@@ -29,7 +29,7 @@ const CONFIG_FILE = getDataFilePath("culling_config.json");
 
 export const DEFAULT_CULLING_CONFIG: CullingConfig = {
   enabled: true,
-  autoHideCulled: true,
+  autoHideCulled: false,
   sharpnessThreshold: 40,
   blinkDetection: true,
   burstDeduplication: true,

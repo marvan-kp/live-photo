@@ -14,13 +14,13 @@ export async function GET(
     
     // Check dynamic uploads dir (/tmp/uploads on Vercel) first
     let filePath = path.join(getUploadsDir(), safeName);
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(/*turbopackIgnore: true*/ filePath)) {
       // Fallback to static public uploads dir
       filePath = path.join(process.cwd(), "public", "uploads", safeName);
     }
 
     // If requested thumbnail doesn't exist locally, try Cloud Storage for the thumbnail first
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(/*turbopackIgnore: true*/ filePath)) {
       const cloudFile = await fetchFromCloudStorage(safeName);
       if (cloudFile) {
         return new Response(new Uint8Array(cloudFile.buffer), {
@@ -33,13 +33,13 @@ export async function GET(
     }
 
     // If requested thumbnail doesn't exist, gracefully fall back to original
-    if (!fs.existsSync(filePath) && safeName.startsWith("thumb_")) {
+    if (!fs.existsSync(/*turbopackIgnore: true*/ filePath) && safeName.startsWith("thumb_")) {
       const origName = safeName.replace(/^thumb_/, "");
       filePath = path.join(getUploadsDir(), origName);
-      if (!fs.existsSync(filePath)) {
+      if (!fs.existsSync(/*turbopackIgnore: true*/ filePath)) {
         filePath = path.join(process.cwd(), "public", "uploads", origName);
       }
-      if (!fs.existsSync(filePath)) {
+      if (!fs.existsSync(/*turbopackIgnore: true*/ filePath)) {
         const cloudOrig = await fetchFromCloudStorage(origName);
         if (cloudOrig) {
           return new Response(new Uint8Array(cloudOrig.buffer), {
@@ -52,11 +52,11 @@ export async function GET(
       }
     }
 
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(/*turbopackIgnore: true*/ filePath)) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    const fileBuffer = fs.readFileSync(filePath);
+    const fileBuffer = fs.readFileSync(/*turbopackIgnore: true*/ filePath);
     const ext = path.extname(safeName).toLowerCase();
     let contentType = "image/jpeg";
     if (ext === ".png") contentType = "image/png";

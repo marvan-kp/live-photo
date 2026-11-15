@@ -22,7 +22,8 @@ import {
   Search,
   Wand2,
   Filter,
-  Lock
+  Lock,
+  Clapperboard
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -528,6 +529,11 @@ function GuestEventContent() {
             <Link href={`/event/${event.id}/live`}>
               <GlassButton variant="secondary" className="text-xs px-3 py-2 flex items-center gap-1.5">
                 <Tv className="w-4 h-4 text-accent" /> Live Stage Wall
+              </GlassButton>
+            </Link>
+            <Link href={`/event/${event.id}/reel`}>
+              <GlassButton variant="secondary" className="text-xs px-3 py-2 flex items-center gap-1.5">
+                <Clapperboard className="w-4 h-4 text-accent" /> 9:16 Reel
               </GlassButton>
             </Link>
             <a href={`/api/events/${event.id}/download`} download>

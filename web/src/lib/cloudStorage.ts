@@ -37,29 +37,18 @@ declare global {
 function normalizeEnvConfig(base: StorageConfig): StorageConfig {
   const merged: StorageConfig = { ...base };
 
-  // Check whether the currently selected provider actually has credentials
-  const hasSupaCreds = Boolean(merged.supabase?.url && merged.supabase?.serviceRoleKey);
-  const hasS3Creds = Boolean(merged.s3?.endpoint && merged.s3?.accessKeyId && merged.s3?.secretAccessKey);
-  const hasBlobCreds = Boolean(merged.blobToken);
-
-  const selectedProviderMissingCreds =
-    merged.provider === "local" ||
-    (merged.provider === "supabase" && !hasSupaCreds) ||
-    (merged.provider === "s3_r2" && !hasS3Creds) ||
-    (merged.provider === "vercel_blob" && !hasBlobCreds);
-
-  // If the stored provider has empty/incomplete keys, reset effective provider to local before checking env vars
-  if (selectedProviderMissingCreds && merged.provider !== "local") {
-    merged.provider = "local";
-  }
+  const validProviders: ("local" | "supabase" | "s3_r2" | "vercel_blob")[] = [
+    "local",
+    "supabase",
+    "s3_r2",
+    "vercel_blob",
+  ];
+  const hasExplicitProvider = Boolean(base.provider && validProviders.includes(base.provider));
 
   // Merge Vercel Blob token from env if not explicitly set
   const envBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (envBlobToken && !merged.blobToken) {
     merged.blobToken = envBlobToken.trim();
-    if (merged.provider === "local") {
-      merged.provider = "vercel_blob";
-    }
   }
 
   // Merge Upstash / Vercel KV from env if not set
@@ -79,9 +68,6 @@ function normalizeEnvConfig(base: StorageConfig): StorageConfig {
       serviceRoleKey: envSupaKey.trim(),
       bucket: envSupaBucket.trim(),
     };
-    if (merged.provider === "local") {
-      merged.provider = "supabase";
-    }
   }
 
   // Merge S3/R2 from env if missing keys
@@ -99,8 +85,18 @@ function normalizeEnvConfig(base: StorageConfig): StorageConfig {
       region: process.env.S3_REGION || "auto",
       publicUrl: s3Public?.trim() || merged.s3?.publicUrl,
     };
-    if (merged.provider === "local") {
+  }
+
+  // Only if no valid provider was explicitly chosen, pick the best available default
+  if (!hasExplicitProvider) {
+    if (merged.blobToken) {
+      merged.provider = "vercel_blob";
+    } else if (merged.supabase?.url && merged.supabase?.serviceRoleKey) {
+      merged.provider = "supabase";
+    } else if (merged.s3?.endpoint && merged.s3?.accessKeyId && merged.s3?.secretAccessKey) {
       merged.provider = "s3_r2";
+    } else {
+      merged.provider = "local";
     }
   }
 
@@ -140,6 +136,26 @@ export function getStorageConfig(): StorageConfig {
   return fallback;
 }
 
+export async function getStorageConfigAsync(): Promise<StorageConfig> {
+  if (globalThis.__GLOBAL_STORAGE_CONFIG__) {
+    return normalizeEnvConfig(globalThis.__GLOBAL_STORAGE_CONFIG__);
+  }
+
+  // 1. Try reading from active Cloud DB (KV / Supabase / Blob manifest)
+  try {
+    const { cloudReadConfig } = await import("./cloudDb");
+    const cloudCfg = await cloudReadConfig<StorageConfig>("storage_config");
+    if (cloudCfg && cloudCfg.provider) {
+      const normalized = normalizeEnvConfig(cloudCfg);
+      globalThis.__GLOBAL_STORAGE_CONFIG__ = normalized;
+      return normalized;
+    }
+  } catch (_) {}
+
+  // 2. Fall back to local synchronous disk config
+  return getStorageConfig();
+}
+
 export function saveStorageConfig(config: StorageConfig): void {
   const normalized = normalizeEnvConfig(config);
   globalThis.__GLOBAL_STORAGE_CONFIG__ = normalized;
@@ -164,6 +180,16 @@ export function saveStorageConfig(config: StorageConfig): void {
       fs.writeFileSync(/*turbopackIgnore: true*/ cwdFile, JSON.stringify(normalized, null, 2), "utf-8");
     }
   } catch (_) {}
+}
+
+export async function saveStorageConfigAsync(config: StorageConfig): Promise<void> {
+  saveStorageConfig(config);
+  try {
+    const { cloudWriteConfig } = await import("./cloudDb");
+    await cloudWriteConfig("storage_config", normalizeEnvConfig(config));
+  } catch (e) {
+    console.warn("Could not persist storage config to Cloud DB:", e);
+  }
 }
 
 // =========================================================================
@@ -266,7 +292,7 @@ export async function testStorageConnection(
 ): Promise<{ success: boolean; message: string; publicUrl?: string }> {
   const cfg = config || getStorageConfig();
 
-  if (cfg.provider === "vercel_blob" || (cfg.provider === "local" && (cfg.blobToken || process.env.BLOB_READ_WRITE_TOKEN))) {
+  if (cfg.provider === "vercel_blob") {
     const token = cfg.blobToken || process.env.BLOB_READ_WRITE_TOKEN;
     if (!token) {
       return { success: false, message: "Missing Vercel Blob Read/Write Token (BLOB_READ_WRITE_TOKEN)." };
@@ -299,48 +325,49 @@ export async function testStorageConnection(
       return {
         success: true,
         message: process.env.VERCEL
-          ? "Local /tmp storage active (ephemeral on Vercel — connect Supabase, Vercel KV, Blob, or R2 for permanent sync)."
-          : "Local high-performance storage is active. Files are served at /api/uploads/...",
+          ? "Local storage active (/tmp storage on serverless). Recommended: connect Supabase, Upstash KV, or R2 for permanent cloud persistence across instances."
+          : "Local high-performance storage is active. Photos are served at /api/uploads/...",
       };
     } catch (err: any) {
       return { success: false, message: `Local storage error: ${err.message}` };
     }
   }
 
-  if (cfg.provider === "supabase" && cfg.supabase) {
-    const { url, serviceRoleKey, bucket } = cfg.supabase;
-    if (!url || !serviceRoleKey || !bucket) {
+  if (cfg.provider === "supabase") {
+    if (!cfg.supabase?.url || !cfg.supabase?.serviceRoleKey || !cfg.supabase?.bucket) {
       return { success: false, message: "Missing Supabase URL, Service Role Key, or Bucket name." };
     }
 
     try {
-      const cleanUrl = url.trim().replace(/\/$/, "");
+      const cleanUrl = cfg.supabase.url.trim().replace(/\/$/, "");
+      const cleanBucket = cfg.supabase.bucket.trim();
       const testFileName = `_db/test_connection.txt`;
-      const uploadUrl = `${cleanUrl}/storage/v1/object/${bucket.trim()}/${testFileName}`;
+      const uploadUrl = `${cleanUrl}/storage/v1/object/${cleanBucket}/${testFileName}`;
 
       const res = await fetch(uploadUrl, {
         method: "POST",
         headers: {
-          apikey: serviceRoleKey.trim(),
-          Authorization: `Bearer ${serviceRoleKey.trim()}`,
+          apikey: cfg.supabase.serviceRoleKey.trim(),
+          Authorization: `Bearer ${cfg.supabase.serviceRoleKey.trim()}`,
           "Content-Type": "text/plain",
           "x-upsert": "true",
         },
         body: "Signature by Marvan storage connection test",
+        signal: AbortSignal.timeout(8000),
       });
 
       if (res.ok) {
-        const publicUrl = `${cleanUrl}/storage/v1/object/public/${bucket.trim()}/${testFileName}`;
+        const publicUrl = `${cleanUrl}/storage/v1/object/public/${cleanBucket}/${testFileName}`;
         return {
           success: true,
-          message: `Connected to Supabase Storage "${bucket}"! Cloud Sync is operational.`,
+          message: `Connected to Supabase Storage "${cleanBucket}"! Cloud Sync is operational.`,
           publicUrl,
         };
       } else {
         const errText = await res.text();
         return {
           success: false,
-          message: `Supabase returned HTTP ${res.status}: ${errText}. Ensure bucket "${bucket}" exists and has Public access ON.`,
+          message: `Supabase returned HTTP ${res.status}: ${errText.slice(0, 200)}. Ensure bucket "${cleanBucket}" exists and has Public access ON.`,
         };
       }
     } catch (err: any) {
@@ -348,11 +375,11 @@ export async function testStorageConnection(
     }
   }
 
-  if (cfg.provider === "s3_r2" && cfg.s3) {
-    if (!cfg.s3.endpoint || !cfg.s3.accessKeyId || !cfg.s3.secretAccessKey || !cfg.s3.bucketName) {
+  if (cfg.provider === "s3_r2") {
+    if (!cfg.s3?.endpoint || !cfg.s3?.accessKeyId || !cfg.s3?.secretAccessKey || !cfg.s3?.bucketName) {
       return {
         success: false,
-        message: `R2 / S3 endpoint is saved, but Access Key ID & Secret Access Key are required to authenticate.`,
+        message: `R2 / S3 requires Endpoint, Access Key ID, Secret Access Key, and Bucket Name.`,
       };
     }
     try {
@@ -383,25 +410,28 @@ export async function uploadToStorage(
   mimeType: string
 ): Promise<{ url: string; provider: "local" | "supabase" | "s3_r2" | "vercel_blob" }> {
   const config = getStorageConfig();
+  const provider = config.provider;
 
-  // 1. Vercel Blob Cloud Storage
-  const blobToken = config.blobToken || process.env.BLOB_READ_WRITE_TOKEN;
-  if ((config.provider === "vercel_blob" || process.env.BLOB_READ_WRITE_TOKEN) && blobToken) {
-    try {
-      const { put } = await import("@vercel/blob");
-      const blob = await put(`uploads/${storedFileName}`, buffer, {
-        access: "public",
-        contentType: mimeType,
-        token: blobToken,
-      });
-      return { url: blob.url, provider: "vercel_blob" };
-    } catch (err) {
-      console.warn("Vercel Blob upload failed, falling back:", err);
+  // 1. Explicit Vercel Blob
+  if (provider === "vercel_blob") {
+    const blobToken = config.blobToken || process.env.BLOB_READ_WRITE_TOKEN;
+    if (blobToken) {
+      try {
+        const { put } = await import("@vercel/blob");
+        const blob = await put(`uploads/${storedFileName}`, buffer, {
+          access: "public",
+          contentType: mimeType,
+          token: blobToken,
+        });
+        return { url: blob.url, provider: "vercel_blob" };
+      } catch (err) {
+        console.warn("Vercel Blob upload failed, falling back to local:", err);
+      }
     }
   }
 
-  // 2. Supabase Cloud Storage
-  if (config.provider === "supabase" && config.supabase?.url && config.supabase?.serviceRoleKey) {
+  // 2. Explicit Supabase Cloud Storage
+  if (provider === "supabase" && config.supabase?.url && config.supabase?.serviceRoleKey) {
     try {
       const { url, serviceRoleKey, bucket } = config.supabase;
       const cleanUrl = url.trim().replace(/\/$/, "");
@@ -417,20 +447,24 @@ export async function uploadToStorage(
           "x-upsert": "true",
         },
         body: buffer as any,
+        signal: AbortSignal.timeout(10000),
       });
 
       if (response.ok) {
         const publicUrl = `${cleanUrl}/storage/v1/object/public/${cleanBucket}/uploads/${storedFileName}`;
         return { url: publicUrl, provider: "supabase" };
+      } else {
+        const errText = await response.text().catch(() => "");
+        console.warn(`Supabase upload HTTP ${response.status}: ${errText}`);
       }
     } catch (err) {
-      console.warn("Supabase upload failed, falling back:", err);
+      console.warn("Supabase upload failed, falling back to local:", err);
     }
   }
 
-  // 3. Cloudflare R2 / S3 Object Storage (AWS SigV4)
+  // 3. Explicit Cloudflare R2 / S3 Object Storage (AWS SigV4)
   if (
-    config.provider === "s3_r2" &&
+    provider === "s3_r2" &&
     config.s3?.endpoint &&
     config.s3?.accessKeyId &&
     config.s3?.secretAccessKey
@@ -443,13 +477,16 @@ export async function uploadToStorage(
           ? `${publicBase}/uploads/${storedFileName}`
           : `/api/uploads/${storedFileName}`;
         return { url, provider: "s3_r2" };
+      } else {
+        const errText = await res.text().catch(() => "");
+        console.warn(`S3/R2 upload HTTP ${res.status}: ${errText}`);
       }
     } catch (err) {
-      console.warn("R2 / S3 upload failed, falling back:", err);
+      console.warn("R2 / S3 upload failed, falling back to local:", err);
     }
   }
 
-  // 4. Local Disk Fallback
+  // 4. Local Disk Storage (Resilient Default and Cloud Fallback)
   if (!fs.existsSync(/*turbopackIgnore: true*/ UPLOADS_DIR)) {
     fs.mkdirSync(/*turbopackIgnore: true*/ UPLOADS_DIR, { recursive: true });
   }

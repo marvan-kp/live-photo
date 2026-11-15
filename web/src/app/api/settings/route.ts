@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { getStorageConfig, saveStorageConfig, testStorageConnection, StorageConfig } from "@/lib/cloudStorage";
+import {
+  getStorageConfig,
+  getStorageConfigAsync,
+  saveStorageConfig,
+  saveStorageConfigAsync,
+  testStorageConnection,
+  StorageConfig,
+} from "@/lib/cloudStorage";
 import { getCloudHealthReport } from "@/lib/cloudDb";
 
 function maskSecret(val?: string, prefix = 6, suffix = 4): string {
@@ -10,7 +17,7 @@ function maskSecret(val?: string, prefix = 6, suffix = 4): string {
 
 export async function GET() {
   try {
-    const config = getStorageConfig();
+    const config = await getStorageConfigAsync();
     const [testResult, cloudDbHealth] = await Promise.all([
       testStorageConnection(config),
       getCloudHealthReport(),
@@ -68,10 +75,11 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { provider, supabase, s3, blobToken, kv, action } = body;
 
-    const currentConfig = getStorageConfig();
+    const currentConfig = await getStorageConfigAsync();
 
     const resolveSecret = (incoming?: string, existing?: string) => {
-      if (!incoming) return existing || "";
+      if (incoming === undefined) return existing || "";
+      if (incoming === "") return "";
       if (incoming.includes("...") || incoming.includes("•")) return existing || "";
       return incoming.trim();
     };
@@ -123,7 +131,7 @@ export async function POST(req: Request) {
     }
 
     const newConfig = buildMergedConfig();
-    saveStorageConfig(newConfig);
+    await saveStorageConfigAsync(newConfig);
 
     const [testResult, cloudDbHealth] = await Promise.all([
       testStorageConnection(newConfig),

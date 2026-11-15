@@ -15,7 +15,8 @@ import {
   Sparkles,
   Heart,
   Loader2,
-  Plus
+  Plus,
+  Clapperboard
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -91,6 +92,11 @@ export default function DashboardOverviewPage() {
           <Link href="/dashboard/upload">
             <GlassButton variant="secondary" className="text-xs px-4 py-2.5 flex items-center gap-1.5">
               <Upload className="w-4 h-4" /> Host Upload
+            </GlassButton>
+          </Link>
+          <Link href="/dashboard/reels">
+            <GlassButton variant="secondary" className="text-xs px-4 py-2.5 flex items-center gap-1.5">
+              <Clapperboard className="w-4 h-4 text-accent" /> 9:16 Reel
             </GlassButton>
           </Link>
           <Link href="/download">

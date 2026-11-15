@@ -49,6 +49,10 @@ import com.livephotoshare.app.model.Event
 import com.livephotoshare.app.model.FaceMatch
 import com.livephotoshare.app.model.Photo
 import com.livephotoshare.app.network.LivePhotoApiClient
+import com.livephotoshare.app.ui.components.*
+import com.livephotoshare.app.ui.reels.StoryReelStudioDialog
+import com.livephotoshare.app.ui.stage.LiveStageWallDialog
+import com.livephotoshare.app.ui.watermark.WatermarkStudioDialog
 import com.livephotoshare.app.ui.theme.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -85,6 +89,9 @@ fun MainScreen(
     var editingEventForModal by remember { mutableStateOf<Event?>(null) }
     var eventToDelete by remember { mutableStateOf<Event?>(null) }
     var photoToDelete by remember { mutableStateOf<Photo?>(null) }
+    var showReelDialog by remember { mutableStateOf(false) }
+    var showLiveStageDialog by remember { mutableStateOf(false) }
+    var showWatermarkDialog by remember { mutableStateOf(false) }
 
     // VIP Event Security PIN states
     val unlockedEventIds = remember { mutableStateListOf<String>() }
@@ -664,7 +671,7 @@ fun MainScreen(
             }
 
 
-            // Quick Join & QR Actions
+            // Quick Join & Actions Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -676,17 +683,37 @@ fun MainScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = MidnightSurface),
                     border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)
                 ) {
-                    Text("Join Code / QR", color = TextPrimary, fontSize = 12.sp)
+                    Text("Join Code", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
 
                 if (selectedEvent != null) {
+                    // 9:16 Story Reel Studio
+                    Button(
+                        onClick = { showReelDialog = true },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldAccent.copy(alpha = 0.2f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent)
+                    ) {
+                        Text("🎬 Reel", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                    }
+
+                    // Live Projector Stage Wall
+                    Button(
+                        onClick = { showLiveStageDialog = true },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MidnightSurface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorderGold)
+                    ) {
+                        Text("📺 Stage", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
                     Button(
                         onClick = { qrEventForModal = selectedEvent },
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MidnightSurface),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent.copy(alpha = 0.4f))
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)
                     ) {
-                        Text("Show QR", color = GoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("QR", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Button(
@@ -709,9 +736,9 @@ fun MainScreen(
                         },
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MidnightSurface),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent.copy(alpha = 0.4f))
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)
                     ) {
-                        Text("📦 ZIP", color = GoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("ZIP", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -729,7 +756,17 @@ fun MainScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = GraphiteCard),
                         border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent.copy(alpha = 0.5f))
                     ) {
-                        Text("✏️ Edit Event", color = GoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("✏️ Edit", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { showWatermarkDialog = true },
+                        modifier = Modifier.weight(1.2f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = GraphiteCard),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorderGold)
+                    ) {
+                        Text("🎨 Watermark", color = GoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Button(
@@ -739,7 +776,7 @@ fun MainScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B1A1A)),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF5555).copy(alpha = 0.5f))
                     ) {
-                        Text("🗑️ Delete Event", color = Color(0xFFFF8888), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("🗑️ Delete", color = Color(0xFFFF8888), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -2865,5 +2902,33 @@ fun MainScreen(
                 }
             }
         }
+    }
+
+    // 9:16 Instagram Story & Highlights Reel Studio
+    if (showReelDialog && selectedEvent != null) {
+        StoryReelStudioDialog(
+            event = selectedEvent!!,
+            allPhotos = photos,
+            client = client,
+            onDismiss = { showReelDialog = false }
+        )
+    }
+
+    // Live Projector Stage Wall Mode
+    if (showLiveStageDialog && selectedEvent != null) {
+        LiveStageWallDialog(
+            event = selectedEvent!!,
+            photos = photos,
+            client = client,
+            onDismiss = { showLiveStageDialog = false }
+        )
+    }
+
+    // Studio Watermark Settings Dialog
+    if (showWatermarkDialog) {
+        WatermarkStudioDialog(
+            client = client,
+            onDismiss = { showWatermarkDialog = false }
+        )
     }
 }

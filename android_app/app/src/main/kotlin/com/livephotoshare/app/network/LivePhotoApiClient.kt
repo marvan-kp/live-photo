@@ -153,6 +153,12 @@ class LivePhotoApiClient(context: Context) {
                     } else {
                         fullUrl
                     }
+                    val qualityScore = obj.optInt("qualityScore", 85)
+                    val likes = obj.optInt("likes", 0)
+                    val isCulled = obj.optBoolean("isCulled", false)
+                    val cullStatus = obj.optString("cullStatus", "approved")
+                    val highlightScore = obj.optInt("highlightScore", (qualityScore * 0.72 + minOf(25, likes * 5) + (if (cullStatus == "approved") 6 else 0)).toInt())
+
                     list.add(
                         Photo(
                             id = obj.optString("id"),
@@ -161,8 +167,12 @@ class LivePhotoApiClient(context: Context) {
                             thumbnailUrl = thumbUrl,
                             guestName = obj.optString("guestName", "Guest"),
                             caption = obj.optString("caption", ""),
-                            likes = obj.optInt("likes", 0),
-                            createdAt = obj.optString("createdAt")
+                            likes = likes,
+                            createdAt = obj.optString("createdAt"),
+                            qualityScore = qualityScore,
+                            isCulled = isCulled,
+                            cullStatus = cullStatus,
+                            highlightScore = highlightScore
                         )
                     )
                 }
@@ -316,10 +326,13 @@ class LivePhotoApiClient(context: Context) {
                 .addFormDataPart("files", fileName, fileBody)
                 .addFormDataPart("guestName", "Event Cover")
                 .addFormDataPart("caption", "cover")
+                .addFormDataPart("adminKey", "marvan2026")
+                .addFormDataPart("bypassCulling", "true")
                 .build()
 
             val request = Request.Builder()
                 .url("$serverUrl/api/photos")
+                .addHeader("x-admin-key", "marvan2026")
                 .post(multipart)
                 .build()
 
@@ -504,6 +517,131 @@ class LivePhotoApiClient(context: Context) {
                     }
                 }
                 Result.success(list)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchReelPhotos(eventId: String): Result<List<Photo>> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("$serverUrl/api/reels?eventId=${eventId.trim()}&sort=highlights")
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(Exception("Reel HTTP ${response.code}"))
+                }
+                val body = response.body?.string().orEmpty()
+                val json = JSONObject(body)
+                val array = json.optJSONArray("photos") ?: JSONArray()
+                val list = mutableListOf<Photo>()
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    val rawUrl = obj.optString("url")
+                    val rawThumb = obj.optString("thumbnailUrl")
+                    val fullUrl = resolvePhotoUrl(rawUrl)
+                    val thumbUrl = if (rawThumb.isNotBlank()) resolvePhotoUrl(rawThumb) else fullUrl
+                    val qualityScore = obj.optInt("qualityScore", 85)
+                    val likes = obj.optInt("likes", 0)
+                    val isCulled = obj.optBoolean("isCulled", false)
+                    val cullStatus = obj.optString("cullStatus", "approved")
+                    val highlightScore = obj.optInt("highlightScore", 85)
+
+                    list.add(
+                        Photo(
+                            id = obj.optString("id"),
+                            name = obj.optString("name"),
+                            url = fullUrl,
+                            thumbnailUrl = thumbUrl,
+                            guestName = obj.optString("guestName", "Guest"),
+                            caption = obj.optString("caption", ""),
+                            likes = likes,
+                            createdAt = obj.optString("createdAt"),
+                            qualityScore = qualityScore,
+                            isCulled = isCulled,
+                            cullStatus = cullStatus,
+                            highlightScore = highlightScore
+                        )
+                    )
+                }
+                Result.success(list)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateCullStatus(photoId: String, status: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val payload = JSONObject().apply {
+                put("action", "update-status")
+                put("photoId", photoId)
+                put("status", status)
+            }
+            val body = payload.toString().toRequestBody("application/json".toMediaTypeOrNull())
+            val request = Request.Builder()
+                .url("$serverUrl/api/culling")
+                .addHeader("x-admin-key", "marvan2026")
+                .post(body)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                Result.success(response.isSuccessful)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchWatermarkConfig(): Result<com.livephotoshare.app.model.WatermarkConfig> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("$serverUrl/api/watermark")
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(Exception("Watermark HTTP ${response.code}"))
+                }
+                val body = response.body?.string().orEmpty()
+                val json = JSONObject(body)
+                val configObj = json.optJSONObject("config") ?: json
+                val config = com.livephotoshare.app.model.WatermarkConfig(
+                    enabled = configObj.optBoolean("enabled", true),
+                    logoPath = configObj.optString("logoPath", "/signature-marvan-logo.png"),
+                    position = configObj.optString("position", "bottom-center"),
+                    scale = configObj.optDouble("scale", 0.22).toFloat(),
+                    opacity = configObj.optDouble("opacity", 0.88).toFloat()
+                )
+                Result.success(config)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun saveWatermarkConfig(config: com.livephotoshare.app.model.WatermarkConfig): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val payload = JSONObject().apply {
+                put("enabled", config.enabled)
+                put("logoPath", config.logoPath)
+                put("position", config.position)
+                put("scale", config.scale)
+                put("opacity", config.opacity)
+            }
+            val body = payload.toString().toRequestBody("application/json".toMediaTypeOrNull())
+            val request = Request.Builder()
+                .url("$serverUrl/api/watermark")
+                .addHeader("x-admin-key", "marvan2026")
+                .post(body)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                Result.success(response.isSuccessful)
             }
         } catch (e: Exception) {
             Result.failure(e)

@@ -22,7 +22,11 @@ data class Photo(
     val caption: String = "",
     val likes: Int = 0,
     val createdAt: String = "",
-    val aiScore: Int = 0
+    val aiScore: Int = 0,
+    val qualityScore: Int = 85,
+    val isCulled: Boolean = false,
+    val cullStatus: String = "approved",
+    val highlightScore: Int = 85
 )
 
 data class FaceMatch(
@@ -30,4 +34,12 @@ data class FaceMatch(
     val matchScore: Int = 95,
     val confidence: String = "High",
     val tags: List<String> = emptyList()
+)
+
+data class WatermarkConfig(
+    val enabled: Boolean = true,
+    val logoPath: String = "/signature-marvan-logo.png",
+    val position: String = "bottom-center",
+    val scale: Float = 0.22f,
+    val opacity: Float = 0.88f
 )
