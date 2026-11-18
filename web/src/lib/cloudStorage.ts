@@ -34,6 +34,21 @@ declare global {
   var __GLOBAL_STORAGE_CONFIG__: StorageConfig | undefined;
 }
 
+export function getEnvBlobToken(): string | undefined {
+  if (process.env.BLOB_READ_WRITE_TOKEN?.trim()) {
+    return process.env.BLOB_READ_WRITE_TOKEN.trim();
+  }
+  for (const [key, val] of Object.entries(process.env)) {
+    if (
+      val &&
+      (key.endsWith("_READ_WRITE_TOKEN") || val.trim().startsWith("vercel_blob_rw_"))
+    ) {
+      return val.trim();
+    }
+  }
+  return undefined;
+}
+
 function normalizeEnvConfig(base: Partial<StorageConfig>): StorageConfig {
   const merged: StorageConfig = {
     provider: "local",
@@ -60,9 +75,9 @@ function normalizeEnvConfig(base: Partial<StorageConfig>): StorageConfig {
   const hasExplicitProvider = Boolean(base.provider && validProviders.includes(base.provider));
 
   // Merge Vercel Blob token from env if not explicitly set
-  const envBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
+  const envBlobToken = getEnvBlobToken();
   if (envBlobToken && !merged.blobToken) {
-    merged.blobToken = envBlobToken.trim();
+    merged.blobToken = envBlobToken;
   }
 
   // Merge Upstash / Vercel KV from env if not set
@@ -307,7 +322,7 @@ export async function testStorageConnection(
   const cfg = config || getStorageConfig();
 
   if (cfg.provider === "vercel_blob") {
-    const token = cfg.blobToken || process.env.BLOB_READ_WRITE_TOKEN;
+    const token = cfg.blobToken || getEnvBlobToken();
     if (!token) {
       return { success: false, message: "Missing Vercel Blob Read/Write Token (BLOB_READ_WRITE_TOKEN)." };
     }
@@ -428,7 +443,7 @@ export async function uploadToStorage(
 
   // 1. Explicit Vercel Blob
   if (provider === "vercel_blob") {
-    const blobToken = config.blobToken || process.env.BLOB_READ_WRITE_TOKEN;
+    const blobToken = config.blobToken || getEnvBlobToken();
     if (blobToken) {
       try {
         const { put } = await import("@vercel/blob");
@@ -563,7 +578,7 @@ export async function deleteFromStorage(photoUrl: string): Promise<boolean> {
   const fileName = path.basename(photoUrl);
 
   // 1. Delete from Vercel Blob
-  const blobToken = config.blobToken || process.env.BLOB_READ_WRITE_TOKEN;
+  const blobToken = config.blobToken || getEnvBlobToken();
   if (photoUrl.includes("vercel-storage.com") && blobToken) {
     try {
       const { del } = await import("@vercel/blob");

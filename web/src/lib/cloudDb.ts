@@ -1,5 +1,5 @@
 import { LRUCache } from 'lru-cache';
-import { getStorageConfig, s3SignedFetch, StorageConfig } from "./cloudStorage";
+import { getStorageConfig, getEnvBlobToken, s3SignedFetch, StorageConfig } from "./cloudStorage";
 
 // Initialize LRU caches for cloud db manifests to reduce remote round-trips
 const eventsCache = new LRUCache<string, { data: any[]; timestamp: number }>({
@@ -123,7 +123,7 @@ export async function detectActiveEngine(cfgOverride?: StorageConfig): Promise<C
     return pgReady ? "supabase_postgres" : "supabase_bucket";
   }
 
-  if (cfg.blobToken || process.env.BLOB_READ_WRITE_TOKEN) {
+  if (cfg.blobToken || getEnvBlobToken()) {
     return "vercel_blob";
   }
 
@@ -157,7 +157,7 @@ export async function getCloudHealthReport() {
       cfg.supabase?.url && cfg.supabase?.serviceRoleKey
         ? await isSupabasePostgresReady(cfg.supabase.url, cfg.supabase.serviceRoleKey, true)
         : false,
-    blobConfigured: Boolean(cfg.blobToken || process.env.BLOB_READ_WRITE_TOKEN),
+    blobConfigured: Boolean(cfg.blobToken || getEnvBlobToken()),
     r2Configured: Boolean(cfg.s3?.endpoint && cfg.s3?.accessKeyId && cfg.s3?.secretAccessKey),
   };
 }
@@ -185,7 +185,7 @@ async function readJsonManifest<T>(filename: string, cfg: StorageConfig): Promis
   }
 
   // 2. Vercel Blob (_db/filename)
-  const blobToken = cfg.blobToken || process.env.BLOB_READ_WRITE_TOKEN;
+  const blobToken = cfg.blobToken || getEnvBlobToken();
   if (blobToken) {
     try {
       const { list } = await import("@vercel/blob");
@@ -240,7 +240,7 @@ async function writeJsonManifest<T>(filename: string, data: T, cfg: StorageConfi
     }
   }
 
-  const blobToken = cfg.blobToken || process.env.BLOB_READ_WRITE_TOKEN;
+  const blobToken = cfg.blobToken || getEnvBlobToken();
   if (blobToken) {
     try {
       const { put } = await import("@vercel/blob");

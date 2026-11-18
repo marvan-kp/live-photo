@@ -11,6 +11,7 @@ import {
 } from "@/lib/cloudDb";
 import {
   getStorageConfig,
+  getEnvBlobToken,
   saveStorageConfig,
   uploadToStorage,
   StorageConfig,
@@ -42,7 +43,7 @@ export async function GET() {
         envDetected: {
           vercel: Boolean(process.env.VERCEL),
           kvEnv: Boolean(process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL),
-          blobEnv: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+          blobEnv: Boolean(getEnvBlobToken()),
           supabaseEnv: Boolean(
             (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) &&
               (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
