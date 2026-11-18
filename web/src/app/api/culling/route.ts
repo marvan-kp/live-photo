@@ -18,7 +18,7 @@ import {
 } from "@/lib/storage";
 import { fetchFromCloudStorage } from "@/lib/cloudStorage";
 import { getUploadsDir } from "@/lib/paths";
-import { isUserAdmin } from "@/lib/auth";
+import { isUserAdmin, isKeyValidAdmin } from "@/lib/auth";
 
 export async function GET(req: Request) {
   try {
@@ -51,9 +51,8 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const isAdmin = await isUserAdmin();
-    const adminKey = req.headers.get("x-admin-key") || "";
-    if (!isAdmin && adminKey !== "marvan2026") {
+    const isAdmin = (await isUserAdmin()) || (await isKeyValidAdmin(req.headers.get("x-admin-key")));
+    if (!isAdmin) {
       return NextResponse.json({ error: "Unauthorized. Admin access required." }, { status: 403 });
     }
 

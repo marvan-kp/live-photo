@@ -2253,10 +2253,20 @@ fun MainScreen(
         }
     }
 
-    // Admin Login Dialog
+    // Admin Login & Security Dialog
     if (showAdminDialog) {
         var adminPass by remember { mutableStateOf("") }
         var adminError by remember { mutableStateOf<String?>(null) }
+        var isVerifying by remember { mutableStateOf(false) }
+
+        // Change Password states
+        var showChangePassForm by remember { mutableStateOf(false) }
+        var currentPassInput by remember { mutableStateOf("") }
+        var newPassInput by remember { mutableStateOf("") }
+        var confirmPassInput by remember { mutableStateOf("") }
+        var changePassMsg by remember { mutableStateOf<String?>(null) }
+        var changePassError by remember { mutableStateOf<String?>(null) }
+        var isUpdatingPass by remember { mutableStateOf(false) }
 
         Dialog(onDismissRequest = { showAdminDialog = false }) {
             Surface(
@@ -2282,31 +2292,143 @@ fun MainScreen(
                             fontSize = 12.sp
                         )
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(
-                                onClick = { showAdminDialog = false },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = GraphiteCard)
-                            ) {
-                                Text("Close", color = TextPrimary)
+                        if (showChangePassForm) {
+                            OutlinedTextField(
+                                value = currentPassInput,
+                                onValueChange = { currentPassInput = it; changePassError = null },
+                                label = { Text("Current Password") },
+                                placeholder = { Text("••••••••") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GoldAccent,
+                                    unfocusedBorderColor = GlassBorder,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary
+                                )
+                            )
+
+                            OutlinedTextField(
+                                value = newPassInput,
+                                onValueChange = { newPassInput = it; changePassError = null },
+                                label = { Text("New Password") },
+                                placeholder = { Text("Min 4 characters") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GoldAccent,
+                                    unfocusedBorderColor = GlassBorder,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary
+                                )
+                            )
+
+                            OutlinedTextField(
+                                value = confirmPassInput,
+                                onValueChange = { confirmPassInput = it; changePassError = null },
+                                label = { Text("Confirm New Password") },
+                                placeholder = { Text("Re-enter new password") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GoldAccent,
+                                    unfocusedBorderColor = GlassBorder,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary
+                                )
+                            )
+
+                            if (changePassError != null) {
+                                Text(text = changePassError!!, color = Color(0xFFFF8888), fontSize = 12.sp)
                             }
-                            Button(
-                                onClick = {
-                                    isAdmin = false
-                                    showAdminDialog = false
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4A1E1E))
+                            if (changePassMsg != null) {
+                                Text(text = changePassMsg!!, color = Color(0xFF4ADE80), fontSize = 12.sp)
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text("Sign Out", color = Color(0xFFFF8888), fontWeight = FontWeight.Bold)
+                                Button(
+                                    onClick = { showChangePassForm = false },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = GraphiteCard)
+                                ) {
+                                    Text("Back", color = TextPrimary)
+                                }
+                                Button(
+                                    onClick = {
+                                        if (newPassInput.trim().length < 4) {
+                                            changePassError = "Password must be at least 4 characters."
+                                        } else if (newPassInput != confirmPassInput) {
+                                            changePassError = "Passwords do not match."
+                                        } else {
+                                            isUpdatingPass = true
+                                            changePassError = null
+                                            changePassMsg = null
+                                            scope.launch {
+                                                val res = client.changeAdminPassword(currentPassInput, newPassInput)
+                                                isUpdatingPass = false
+                                                res.onSuccess { msg ->
+                                                    changePassMsg = "✓ $msg"
+                                                    currentPassInput = ""
+                                                    newPassInput = ""
+                                                    confirmPassInput = ""
+                                                }.onFailure { err ->
+                                                    changePassError = err.message ?: "Failed to update password."
+                                                }
+                                            }
+                                        }
+                                    },
+                                    enabled = !isUpdatingPass,
+                                    modifier = Modifier.weight(1.3f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = GoldAccent)
+                                ) {
+                                    Text(if (isUpdatingPass) "Saving..." else "Save Password", color = DarkBackground, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            Button(
+                                onClick = { showChangePassForm = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = GraphiteCard),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, GoldAccent.copy(alpha = 0.5f))
+                            ) {
+                                Text("🔑 Change Admin Password", color = GoldAccent, fontWeight = FontWeight.SemiBold)
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { showAdminDialog = false },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = GraphiteCard)
+                                ) {
+                                    Text("Close", color = TextPrimary)
+                                }
+                                Button(
+                                    onClick = {
+                                        isAdmin = false
+                                        showAdminDialog = false
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4A1E1E))
+                                ) {
+                                    Text("Sign Out", color = Color(0xFFFF8888), fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     } else {
                         Text(
-                            text = "Enter admin password to unlock host features (Default: marvan2026):",
+                            text = "Enter your admin password to unlock organizer and camera upload features:",
                             color = TextSecondary,
                             fontSize = 12.sp
                         )
@@ -2318,7 +2440,9 @@ fun MainScreen(
                                 adminError = null
                             },
                             label = { Text("Password") },
-                            placeholder = { Text("marvan2026") },
+                            placeholder = { Text("••••••••") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
@@ -2347,23 +2471,33 @@ fun MainScreen(
 
                             Button(
                                 onClick = {
-                                    if (adminPass.trim() == "marvan2026" || adminPass.trim() == "admin") {
-                                        isAdmin = true
-                                        showAdminDialog = false
-                                    } else {
-                                        adminError = "Invalid admin password. Default is marvan2026"
+                                    if (adminPass.isBlank()) {
+                                        adminError = "Please enter your password."
+                                        return@Button
+                                    }
+                                    isVerifying = true
+                                    adminError = null
+                                    scope.launch {
+                                        val res = client.verifyAdminPassword(adminPass)
+                                        isVerifying = false
+                                        res.onSuccess {
+                                            isAdmin = true
+                                            showAdminDialog = false
+                                        }.onFailure {
+                                            adminError = "Invalid admin password."
+                                        }
                                     }
                                 },
+                                enabled = !isVerifying,
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(containerColor = GoldAccent)
                             ) {
-                                Text("Login", color = DarkBackground, fontWeight = FontWeight.Bold)
+                                Text(if (isVerifying) "..." else "Login", color = DarkBackground, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
             }
-
         }
     }
 

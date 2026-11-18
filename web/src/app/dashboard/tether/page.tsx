@@ -103,7 +103,7 @@ export default function CameraTetherPage() {
       gain.connect(audioCtx.destination);
       osc.start();
       osc.stop(audioCtx.currentTime + 0.35);
-    } catch (_) {}
+    } catch (_) { }
   };
 
   // Upload a single file from camera tethering
@@ -148,13 +148,13 @@ export default function CameraTetherPage() {
           prev.map((l) =>
             l.id === logId
               ? {
-                  ...l,
-                  status: "success",
-                  latencyMs: latency,
-                  qualityScore: uploadedFile?.qualityScore,
-                  isCulled: uploadedFile?.isCulled,
-                  cullStatus: uploadedFile?.cullStatus,
-                }
+                ...l,
+                status: "success",
+                latencyMs: latency,
+                qualityScore: uploadedFile?.qualityScore,
+                isCulled: uploadedFile?.isCulled,
+                cullStatus: uploadedFile?.cullStatus,
+              }
               : l
           )
         );
@@ -287,7 +287,7 @@ export default function CameraTetherPage() {
   };
 
   const copyCliCommand = () => {
-    const cmd = `node scripts/camera-watcher.mjs --event="${selectedEventId || "sample2"}" --folder="C:\\Photos\\Tether" --key="marvan2026"`;
+    const cmd = `node scripts/camera-watcher.mjs --event="${selectedEventId || "sample2"}" --folder="C:\\Photos\\Tether" --key="YOUR_ADMIN_KEY"`;
     navigator.clipboard.writeText(cmd);
     setCopiedCli(true);
     setTimeout(() => setCopiedCli(false), 2000);
@@ -350,9 +350,8 @@ export default function CameraTetherPage() {
           </div>
           <div className="text-xl font-extrabold text-white flex items-center gap-2">
             <span
-              className={`w-2.5 h-2.5 rounded-full ${
-                isWatching ? "bg-emerald-400 animate-ping" : "bg-white/30"
-              }`}
+              className={`w-2.5 h-2.5 rounded-full ${isWatching ? "bg-emerald-400 animate-ping" : "bg-white/30"
+                }`}
             />
             {isWatching ? "Live Watching" : "Standby"}
           </div>
@@ -405,21 +404,19 @@ export default function CameraTetherPage() {
       <div className="flex gap-2 border-b border-white/10 pb-2">
         <button
           onClick={() => setActiveTab("browser")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === "browser"
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === "browser"
               ? "bg-accent/20 text-accent border border-accent/30"
               : "text-white/60 hover:text-white"
-          }`}
+            }`}
         >
           🌐 In-Browser Hot-Folder (Zero Install)
         </button>
         <button
           onClick={() => setActiveTab("cli")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === "cli"
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === "cli"
               ? "bg-accent/20 text-accent border border-accent/30"
               : "text-white/60 hover:text-white"
-          }`}
+            }`}
         >
           💻 Desktop CLI Daemon (Sony / Lightroom Background)
         </button>
@@ -573,9 +570,8 @@ export default function CameraTetherPage() {
                           {log.status === "success" && (
                             <div className="text-right space-y-0.5">
                               <span
-                                className={`flex items-center justify-end gap-1 font-bold ${
-                                  log.isCulled ? "text-amber-400" : "text-emerald-400"
-                                }`}
+                                className={`flex items-center justify-end gap-1 font-bold ${log.isCulled ? "text-amber-400" : "text-emerald-400"
+                                  }`}
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                                 {log.isCulled ? `Culled (${log.cullStatus})` : `Live (${log.latencyMs}ms)`}
@@ -632,7 +628,7 @@ export default function CameraTetherPage() {
               </button>
             </div>
             <p className="text-accent/90 break-all select-all">
-              {`node scripts/camera-watcher.mjs --event="${selectedEventId || "sample2"}" --folder="C:\\Photos\\Tether" --key="marvan2026"`}
+              {`node scripts/camera-watcher.mjs --event="${selectedEventId || "sample2"}" --folder="C:\\Photos\\Tether" --key="YOUR_ADMIN_KEY"`}
             </p>
           </div>
 

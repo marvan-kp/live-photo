@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { loadPhotosAsync } from "@/lib/storage";
-import { getWatermarkConfigAsync } from "@/lib/watermark";
+import { getWatermarkConfigAsync, applyWatermark } from "@/lib/watermark";
 import { fetchFromCloudStorage } from "@/lib/cloudStorage";
 import { getUploadsDir } from "@/lib/paths";
 
@@ -55,6 +55,9 @@ function respondWithImage(buffer: Buffer, contentType: string) {
   });
 }
 
+// Cache for watermarked images to avoid re-processing
+const watermarkCache = new Map<string, Promise<Buffer | null>>();
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -79,25 +82,25 @@ export async function GET(req: Request) {
         } catch (_) {}
       }
 
+      // Optimized: Check all paths once with combined logic
       const safeName = path.basename(target.split("?")[0]);
-      const publicPath = path.join(process.cwd(), "public", safeName);
-      if (fs.existsSync(/*turbopackIgnore: true*/ publicPath)) {
-        return respondWithImage(fs.readFileSync(/*turbopackIgnore: true*/ publicPath), inferContentType(safeName, "image/png"));
-      }
+      const pathsToCheck = [
+        path.join(process.cwd(), "public", safeName),
+        path.join(getUploadsDir(), safeName),
+        path.join(process.cwd(), "public", "signature-marvan-logo.png")
+      ];
 
-      const tmpUpload = path.join(getUploadsDir(), safeName);
-      if (fs.existsSync(/*turbopackIgnore: true*/ tmpUpload)) {
-        return respondWithImage(fs.readFileSync(/*turbopackIgnore: true*/ tmpUpload), inferContentType(safeName, "image/png"));
+      for (const testPath of pathsToCheck) {
+        try {
+          if (fs.existsSync(/*turbopackIgnore: true*/ testPath)) {
+            return respondWithImage(fs.readFileSync(/*turbopackIgnore: true*/ testPath), inferContentType(testPath, "image/png"));
+          }
+        } catch (_) {}
       }
 
       const cloudLogo = await fetchFromCloudStorage(safeName);
       if (cloudLogo) {
         return respondWithImage(cloudLogo.buffer, cloudLogo.contentType);
-      }
-
-      const fallbackLogo = path.join(process.cwd(), "public", "signature-marvan-logo.png");
-      if (fs.existsSync(fallbackLogo)) {
-        return respondWithImage(fs.readFileSync(fallbackLogo), "image/png");
       }
 
       return NextResponse.json({ error: "Watermark asset not found" }, { status: 404 });
@@ -117,8 +120,17 @@ export async function GET(req: Request) {
     const chosenUrl = useThumb && photo.thumbnailUrl ? photo.thumbnailUrl : photo.url;
 
     // Helper to apply EXIF rotation / 1400px optimization cleanly before responding
-    const sendPhotoBuffer = async (rawBuf: Buffer, ct: string) => {
-      const opt = await optimizeForReel(rawBuf, targetWidth);
+    const sendPhotoBuffer = async (rawBuf: Buffer, ct: string, applyWm: boolean = false) => {
+      let bufferToProcess = rawBuf;
+      if (applyWm) {
+        // Cache watermarked images to avoid re-processing
+        const cacheKey = `${photoId}:${Buffer.from(rawBuf).toString('base64')}`;
+        if (!watermarkCache.has(cacheKey)) {
+          watermarkCache.set(cacheKey, applyWatermark(rawBuf));
+        }
+        bufferToProcess = await watermarkCache.get(cacheKey) || rawBuf;
+      }
+      const opt = await optimizeForReel(bufferToProcess, targetWidth);
       return respondWithImage(opt.buf, opt.mime || ct);
     };
 
@@ -127,33 +139,42 @@ export async function GET(req: Request) {
       const resp = await fetch(chosenUrl, { cache: "no-store" });
       if (resp.ok) {
         const buf = Buffer.from(await resp.arrayBuffer());
-        return await sendPhotoBuffer(buf, resp.headers.get("content-type") || photo.mimeType || "image/jpeg");
+        const shouldWatermark = !!(photo as any).reelWatermarked;
+        return await sendPhotoBuffer(buf, resp.headers.get("content-type") || photo.mimeType || "image/jpeg", shouldWatermark);
       }
     }
 
-    // Local / Public / Cloud proxy fallback
+    // Local / Public / Cloud proxy fallback - optimized to avoid redundant checks
     if (chosenUrl.startsWith("/")) {
       const publicRoot = path.resolve(process.cwd(), "public");
       const relPath = path.resolve(publicRoot, "." + chosenUrl.split("?")[0]);
-      if (relPath.startsWith(publicRoot) && fs.existsSync(/*turbopackIgnore: true*/ relPath) && fs.statSync(relPath).isFile()) {
-        return await sendPhotoBuffer(fs.readFileSync(/*turbopackIgnore: true*/ relPath), inferContentType(relPath, photo.mimeType || "image/jpeg"));
+      // Combine path checks to avoid multiple fs.existsSync calls
+      if (relPath.startsWith(publicRoot) && fs.statSync(relPath).isFile()) {
+        const shouldWatermark = !!(photo as any).reelWatermarked;
+        return await sendPhotoBuffer(fs.readFileSync(relPath), inferContentType(relPath, photo.mimeType || "image/jpeg"), shouldWatermark);
       }
     }
 
+    // Single path resolution for both temporary and public uploads directories
     const safeName = path.basename(chosenUrl.split("?")[0]);
-    const tmpPath = path.join(getUploadsDir(), safeName);
-    if (fs.existsSync(/*turbopackIgnore: true*/ tmpPath)) {
-      return await sendPhotoBuffer(fs.readFileSync(/*turbopackIgnore: true*/ tmpPath), inferContentType(safeName, photo.mimeType || "image/jpeg"));
-    }
+    const possiblePaths = [
+      path.join(getUploadsDir(), safeName),
+      path.join(process.cwd(), "public", "uploads", safeName)
+    ];
 
-    const publicUploadsPath = path.join(process.cwd(), "public", "uploads", safeName);
-    if (fs.existsSync(/*turbopackIgnore: true*/ publicUploadsPath)) {
-      return await sendPhotoBuffer(fs.readFileSync(/*turbopackIgnore: true*/ publicUploadsPath), inferContentType(safeName, photo.mimeType || "image/jpeg"));
+    for (const testPath of possiblePaths) {
+      try {
+        if (fs.existsSync(/*turbopackIgnore: true*/ testPath) && fs.statSync(/*turbopackIgnore: true*/ testPath).isFile()) {
+          const shouldWatermark = !!(photo as any).reelWatermarked;
+          return await sendPhotoBuffer(fs.readFileSync(/*turbopackIgnore: true*/ testPath), inferContentType(testPath, photo.mimeType || "image/jpeg"), shouldWatermark);
+        }
+      } catch (_) {}
     }
 
     const cloudFile = await fetchFromCloudStorage(safeName);
     if (cloudFile) {
-      return await sendPhotoBuffer(cloudFile.buffer, cloudFile.contentType);
+      const shouldWatermark = !!(photo as any).reelWatermarked;
+      return await sendPhotoBuffer(cloudFile.buffer, cloudFile.contentType, shouldWatermark);
     }
 
     // If thumbnail was requested but missing, retry original full-resolution URL
@@ -161,13 +182,15 @@ export async function GET(req: Request) {
       if (photo.url.startsWith("http")) {
         const resp = await fetch(photo.url, { cache: "no-store" });
         if (resp.ok) {
-          return await sendPhotoBuffer(Buffer.from(await resp.arrayBuffer()), resp.headers.get("content-type") || "image/jpeg");
+          const shouldWatermark = !!(photo as any).reelWatermarked;
+          return await sendPhotoBuffer(Buffer.from(await resp.arrayBuffer()), resp.headers.get("content-type") || "image/jpeg", shouldWatermark);
         }
       }
       const origName = path.basename(photo.url.split("?")[0]);
       const cloudOrig = await fetchFromCloudStorage(origName);
       if (cloudOrig) {
-        return await sendPhotoBuffer(cloudOrig.buffer, cloudOrig.contentType);
+        const shouldWatermark = !!(photo as any).reelWatermarked;
+        return await sendPhotoBuffer(cloudOrig.buffer, cloudOrig.contentType, shouldWatermark);
       }
     }
 

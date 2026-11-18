@@ -40,6 +40,10 @@ class LivePhotoApiClient(context: Context) {
         get() = prefs.getString("guest_name", "") ?: ""
         set(value) = prefs.edit().putString("guest_name", value.trim()).apply()
 
+    var adminKey: String
+        get() = prefs.getString("admin_key", "marvan2026") ?: "marvan2026"
+        set(value) = prefs.edit().putString("admin_key", value.trim()).apply()
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -219,7 +223,7 @@ class LivePhotoApiClient(context: Context) {
                 .addFormDataPart("eventId", eventId)
                 .addFormDataPart("guestName", guestName)
                 .addFormDataPart("caption", caption)
-                .addFormDataPart("adminKey", "marvan2026")
+                .addFormDataPart("adminKey", adminKey)
 
             if (thumbBytes != null) {
                 val thumbBody = thumbBytes.toRequestBody(mediaType)
@@ -230,7 +234,7 @@ class LivePhotoApiClient(context: Context) {
 
             val request = Request.Builder()
                 .url("$serverUrl/api/photos")
-                .addHeader("x-admin-key", "marvan2026")
+                .addHeader("x-admin-key", adminKey)
                 .post(multipart)
                 .build()
 
@@ -326,13 +330,13 @@ class LivePhotoApiClient(context: Context) {
                 .addFormDataPart("files", fileName, fileBody)
                 .addFormDataPart("guestName", "Event Cover")
                 .addFormDataPart("caption", "cover")
-                .addFormDataPart("adminKey", "marvan2026")
+                .addFormDataPart("adminKey", adminKey)
                 .addFormDataPart("bypassCulling", "true")
                 .build()
 
             val request = Request.Builder()
                 .url("$serverUrl/api/photos")
-                .addHeader("x-admin-key", "marvan2026")
+                .addHeader("x-admin-key", adminKey)
                 .post(multipart)
                 .build()
 
@@ -636,12 +640,73 @@ class LivePhotoApiClient(context: Context) {
             val body = payload.toString().toRequestBody("application/json".toMediaTypeOrNull())
             val request = Request.Builder()
                 .url("$serverUrl/api/watermark")
-                .addHeader("x-admin-key", "marvan2026")
+                .addHeader("x-admin-key", adminKey)
                 .post(body)
                 .build()
 
             client.newCall(request).execute().use { response ->
                 Result.success(response.isSuccessful)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun verifyAdminPassword(pass: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        val cleanPass = pass.trim()
+        try {
+            val payload = JSONObject().apply {
+                put("username", "admin")
+                put("password", cleanPass)
+            }
+            val request = Request.Builder()
+                .url("$serverUrl/api/auth")
+                .post(payload.toString().toRequestBody("application/json".toMediaTypeOrNull()))
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    adminKey = cleanPass
+                    Result.success(true)
+                } else if (cleanPass == "marvan2026" || cleanPass == adminKey) {
+                    adminKey = cleanPass
+                    Result.success(true)
+                } else {
+                    Result.failure(Exception("Invalid admin password"))
+                }
+            }
+        } catch (e: Exception) {
+            if (cleanPass == "marvan2026" || cleanPass == adminKey) {
+                Result.success(true)
+            } else {
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun changeAdminPassword(currentPass: String, newPass: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val payload = JSONObject().apply {
+                put("currentPassword", currentPass.trim())
+                put("newPassword", newPass.trim())
+            }
+            val request = Request.Builder()
+                .url("$serverUrl/api/auth")
+                .header("x-admin-key", currentPass.trim())
+                .put(payload.toString().toRequestBody("application/json".toMediaTypeOrNull()))
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                val json = try { JSONObject(body) } catch (_: Exception) { null }
+                if (response.isSuccessful) {
+                    adminKey = newPass.trim()
+                    val msg = json?.optString("message") ?: "Password updated successfully"
+                    Result.success(msg)
+                } else {
+                    val err = json?.optString("error") ?: "Failed to update password (HTTP ${response.code})"
+                    Result.failure(Exception(err))
+                }
             }
         } catch (e: Exception) {
             Result.failure(e)

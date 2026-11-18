@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { uploadFileToCloud, listStoredFilesAsync, likePhotoAsync, deleteStoredFile } from "@/lib/storage";
-import { isUserAdmin } from "@/lib/auth";
+import { isUserAdmin, isKeyValidAdmin } from "@/lib/auth";
 import { applyWatermark } from "@/lib/watermark";
 import { analyzeImageQuality } from "@/lib/culling";
 
@@ -44,11 +44,10 @@ export async function POST(req: Request) {
     const headerKey = req.headers.get("x-admin-key") || req.headers.get("x-admin-password") || "";
     const formAdminKey = (formData.get("adminKey") as string) || "";
 
+    const incomingKey = headerKey || formAdminKey || queryKey;
     const authorized =
       (await isUserAdmin()) ||
-      headerKey === "marvan2026" ||
-      formAdminKey === "marvan2026" ||
-      queryKey === "marvan2026" ||
+      (await isKeyValidAdmin(incomingKey)) ||
       formAdminKey === "admin";
 
     if (!authorized) {
@@ -157,9 +156,8 @@ export async function PUT(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const isAdmin = (await isUserAdmin()) ||
-      req.headers.get("x-admin-key") === "marvan2026" ||
-      req.headers.get("x-admin-password") === "marvan2026";
+    const delKey = req.headers.get("x-admin-key") || req.headers.get("x-admin-password");
+    const isAdmin = (await isUserAdmin()) || (await isKeyValidAdmin(delKey));
     if (!isAdmin) {
       return NextResponse.json({ error: "Only admin can delete photos" }, { status: 403 });
     }

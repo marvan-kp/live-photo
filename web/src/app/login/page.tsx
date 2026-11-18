@@ -10,8 +10,8 @@ import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("marvan2026");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -125,7 +125,7 @@ export default function LoginPage() {
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="admin"
+                    placeholder="Enter username"
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 pl-10 text-white placeholder-white/30 text-sm focus:outline-none focus:border-accent"
                     required
                   />
@@ -148,18 +148,6 @@ export default function LoginPage() {
                   />
                   <Lock className="w-4 h-4 text-white/40 absolute left-3.5 top-3.5" />
                 </div>
-              </div>
-
-              {/* Quick Preset Helper */}
-              <div
-                onClick={() => {
-                  setUsername("admin");
-                  setPassword("marvan2026");
-                }}
-                className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 hover:border-accent/30 cursor-pointer flex items-center justify-between text-xs text-white/50 transition-colors"
-              >
-                <span>Default credentials:</span>
-                <span className="font-mono text-accent">admin / marvan2026</span>
               </div>
 
               <GlassButton

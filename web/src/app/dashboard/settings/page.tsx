@@ -23,7 +23,10 @@ import {
   Zap,
   Server,
   ShieldCheck,
-  ArrowUpDown
+  ArrowUpDown,
+  Key,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import Link from "next/link";
 
@@ -111,6 +114,57 @@ export default function DashboardSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Admin Password Change state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordMsg(null);
+
+    if (!currentPassword.trim()) {
+      setPasswordMsg({ ok: false, text: "Current password is required." });
+      return;
+    }
+
+    if (newPassword.trim().length < 4) {
+      setPasswordMsg({ ok: false, text: "New password must be at least 4 characters long." });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg({ ok: false, text: "New passwords do not match." });
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const res = await fetch("/api/auth", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPasswordMsg({ ok: true, text: data.message || "Admin password successfully updated!" });
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setTimeout(() => setPasswordMsg(null), 6000);
+      } else {
+        setPasswordMsg({ ok: false, text: data.error || "Failed to update password." });
+      }
+    } catch (err: any) {
+      setPasswordMsg({ ok: false, text: "Error: " + err.message });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   const loadCloudSyncStatus = async () => {
     try {
@@ -1227,6 +1281,120 @@ export default function DashboardSettingsPage() {
             </p>
           </div>
         </div>
+      </GlassCard>
+
+      {/* Admin Security & Password Card */}
+      <GlassCard className="p-6 rounded-3xl border-white/15 space-y-5">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-accent/20 border border-accent/30 flex items-center justify-center">
+              <Key className="w-5 h-5 text-accent" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Admin Security &amp; Password</h3>
+              <p className="text-xs text-white/50">
+                Change your admin dashboard passkey. Synchronizes permanently across cloud database and local servers.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1 rounded-full bg-accent/10 border border-accent/30 text-accent text-xs font-semibold flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5" /> Secured Access
+          </span>
+        </div>
+
+        <form onSubmit={handleChangePassword} className="space-y-4 max-w-xl">
+          {passwordMsg && (
+            <div
+              className={`p-3.5 rounded-xl border flex items-center gap-2 text-xs ${
+                passwordMsg.ok
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  : "bg-red-500/10 border-red-500/30 text-red-400"
+              }`}
+            >
+              {passwordMsg.ok ? (
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              )}
+              <span>{passwordMsg.text}</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-white/70 mb-1.5 uppercase tracking-wide">
+              Current Admin Password
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Enter current password"
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 pr-10 text-white placeholder-white/30 text-sm focus:outline-none focus:border-accent font-mono"
+                required
+              />
+              <Lock className="w-4 h-4 text-white/40 absolute left-3.5 top-3" />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-2.5 text-white/40 hover:text-white"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-white/70 mb-1.5 uppercase tracking-wide">
+                New Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Min 4 characters"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-white placeholder-white/30 text-sm focus:outline-none focus:border-accent font-mono"
+                  required
+                />
+                <Key className="w-4 h-4 text-white/40 absolute left-3.5 top-3" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-white/70 mb-1.5 uppercase tracking-wide">
+                Confirm New Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-white placeholder-white/30 text-sm focus:outline-none focus:border-accent font-mono"
+                  required
+                />
+                <Key className="w-4 h-4 text-white/40 absolute left-3.5 top-3" />
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-1 flex flex-wrap items-center gap-3">
+            <GlassButton
+              type="submit"
+              variant="primary"
+              disabled={changingPassword}
+              className="text-xs px-5 py-2.5 flex items-center gap-2 shadow-lg shadow-accent/20"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {changingPassword ? "Updating Password..." : "Update Admin Password"}
+            </GlassButton>
+            <span className="text-[11px] text-white/40">
+              Your new password takes effect immediately across all sessions.
+            </span>
+          </div>
+        </form>
       </GlassCard>
 
       {/* AI Face Engine Status Card */}

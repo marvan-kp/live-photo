@@ -20,7 +20,7 @@ import { loadPhotos, loadPhotosAsync, savePhotos, StoredFile } from "@/lib/stora
 import { getWatermarkConfig, getWatermarkConfigAsync } from "@/lib/watermark";
 import { loadCullingConfig, loadCullingConfigAsync } from "@/lib/culling";
 import { getUploadsDir } from "@/lib/paths";
-import { isUserAdmin } from "@/lib/auth";
+import { isUserAdmin, isKeyValidAdmin } from "@/lib/auth";
 
 export async function GET() {
   try {
@@ -73,8 +73,7 @@ export async function POST(req: Request) {
 
     const authorized =
       (await isUserAdmin()) ||
-      headerKey === "marvan2026" ||
-      bodyKey === "marvan2026" ||
+      (await isKeyValidAdmin(headerKey || bodyKey)) ||
       bodyKey === "admin";
 
     if (!authorized) {

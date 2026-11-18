@@ -1,4 +1,21 @@
+import { LRUCache } from 'lru-cache';
 import { getStorageConfig, s3SignedFetch, StorageConfig } from "./cloudStorage";
+
+// Initialize LRU caches for cloud db manifests to reduce remote round-trips
+const eventsCache = new LRUCache<string, { data: any[]; timestamp: number }>({
+  max: 100,
+  ttl: 15_000, // 15 seconds TTL for fresh data
+});
+
+const photosCache = new LRUCache<string, { data: any[]; timestamp: number }>({
+  max: 200,
+  ttl: 15_000,
+});
+
+const configCache = new LRUCache<string, { data: any; timestamp: number }>({
+  max: 100,
+  ttl: 30_000,
+});
 
 export type CloudDbEngine =
   | "upstash_kv"
@@ -257,6 +274,11 @@ async function writeJsonManifest<T>(filename: string, data: T, cfg: StorageConfi
 // EVENTS Sync (Atomic Hash/Postgres + Manifest Fallback)
 // =========================================================================
 export async function cloudReadEvents<T extends { id: string }>(): Promise<T[] | null> {
+  const cached = eventsCache.get("all_events");
+  if (cached && Date.now() - cached.timestamp < 15_000) {
+    return cached.data as T[];
+  }
+
   const cfg = getStorageConfig();
 
   // 1. Upstash / Vercel KV
@@ -270,6 +292,7 @@ export async function cloudReadEvents<T extends { id: string }>(): Promise<T[] |
             list.push(JSON.parse(raw[i + 1]));
           } catch (_) {}
         }
+        eventsCache.set("all_events", { data: list, timestamp: Date.now() });
         return list;
       }
       if (raw && !Array.isArray(raw) && typeof raw === "object") {
@@ -279,8 +302,10 @@ export async function cloudReadEvents<T extends { id: string }>(): Promise<T[] |
             list.push(typeof val === "string" ? JSON.parse(val) : (val as T));
           } catch (_) {}
         }
+        eventsCache.set("all_events", { data: list, timestamp: Date.now() });
         return list;
       }
+      eventsCache.set("all_events", { data: [], timestamp: Date.now() });
       return [];
     } catch (e) {
       console.warn("KV cloudReadEvents failed:", e);
@@ -302,7 +327,9 @@ export async function cloudReadEvents<T extends { id: string }>(): Promise<T[] |
         });
         if (res.ok) {
           const rows = (await res.json()) as { data: T }[];
-          return rows.map((r) => r.data);
+          const list = rows.map((r) => r.data);
+          eventsCache.set("all_events", { data: list, timestamp: Date.now() });
+          return list;
         }
       } catch (e) {
         console.warn("Supabase Postgres readEvents failed:", e);
@@ -311,7 +338,11 @@ export async function cloudReadEvents<T extends { id: string }>(): Promise<T[] |
   }
 
   // 3. Manifest (Supabase Bucket / Vercel Blob / R2)
-  return await readJsonManifest<T[]>("events.json", cfg);
+  const manifest = await readJsonManifest<T[]>("events.json", cfg);
+  if (manifest) {
+    eventsCache.set("all_events", { data: manifest, timestamp: Date.now() });
+  }
+  return manifest;
 }
 
 export async function cloudUpsertEvent<T extends { id: string }>(event: T): Promise<void> {
@@ -392,6 +423,9 @@ export async function cloudDeleteEvent(id: string): Promise<void> {
 }
 
 export async function cloudWriteAllEvents<T extends { id: string }>(events: T[]): Promise<boolean> {
+  // Clear cache on bulk write
+  eventsCache.clear();
+
   const cfg = getStorageConfig();
   let ok = false;
 
@@ -409,26 +443,33 @@ export async function cloudWriteAllEvents<T extends { id: string }>(events: T[])
   }
 
   if (cfg.supabase?.url && cfg.supabase?.serviceRoleKey) {
-    const pgReady = await isSupabasePostgresReady(cfg.supabase.url, cfg.supabase.serviceRoleKey);
+    const supaUrl = cfg.supabase.url.trim().replace(/\/$/, "");
+    const supaKey = cfg.supabase.serviceRoleKey.trim();
+    const pgReady = await isSupabasePostgresReady(supaUrl, supaKey);
     if (pgReady && events.length > 0) {
       try {
-        const cleanUrl = cfg.supabase.url.trim().replace(/\/$/, "");
         const rows = events.map((ev) => ({
           id: ev.id,
           data: ev,
           updated_at: new Date().toISOString(),
         }));
-        const res = await fetch(`${cleanUrl}/rest/v1/lps_events`, {
-          method: "POST",
-          headers: {
-            apikey: cfg.supabase.serviceRoleKey.trim(),
-            Authorization: `Bearer ${cfg.supabase.serviceRoleKey.trim()}`,
-            "Content-Type": "application/json",
-            Prefer: "resolution=merge-duplicates",
-          },
-          body: JSON.stringify(rows),
-        });
-        if (res.ok) ok = true;
+
+        // Batch Supabase writes (50 items per batch)
+        for (let i = 0; i < rows.length; i += 50) {
+          const batch = rows.slice(i, i + 50);
+          await fetch(`${supaUrl}/rest/v1/lps_events`, {
+            method: "POST",
+            headers: {
+              apikey: supaKey,
+              Authorization: `Bearer ${supaKey}`,
+              "Content-Type": "application/json",
+              Prefer: "resolution=merge-duplicates",
+            },
+            body: JSON.stringify(batch),
+          });
+        }
+
+        ok = true;
       } catch (e) {
         console.warn("Supabase writeAllEvents failed:", e);
       }
@@ -443,6 +484,11 @@ export async function cloudWriteAllEvents<T extends { id: string }>(events: T[])
 // PHOTOS Sync (Atomic Hash/Postgres + Manifest Fallback)
 // =========================================================================
 export async function cloudReadPhotos<T extends { id: string }>(): Promise<T[] | null> {
+  const cached = photosCache.get("all_photos");
+  if (cached && Date.now() - cached.timestamp < 15_000) {
+    return cached.data as T[];
+  }
+
   const cfg = getStorageConfig();
 
   if (cfg.kv?.url && cfg.kv?.token) {
@@ -455,6 +501,7 @@ export async function cloudReadPhotos<T extends { id: string }>(): Promise<T[] |
             list.push(JSON.parse(raw[i + 1]));
           } catch (_) {}
         }
+        photosCache.set("all_photos", { data: list, timestamp: Date.now() });
         return list;
       }
       if (raw && !Array.isArray(raw) && typeof raw === "object") {
@@ -464,8 +511,10 @@ export async function cloudReadPhotos<T extends { id: string }>(): Promise<T[] |
             list.push(typeof val === "string" ? JSON.parse(val) : (val as T));
           } catch (_) {}
         }
+        photosCache.set("all_photos", { data: list, timestamp: Date.now() });
         return list;
       }
+      photosCache.set("all_photos", { data: [], timestamp: Date.now() });
       return [];
     } catch (e) {
       console.warn("KV cloudReadPhotos failed:", e);
@@ -486,7 +535,9 @@ export async function cloudReadPhotos<T extends { id: string }>(): Promise<T[] |
         });
         if (res.ok) {
           const rows = (await res.json()) as { data: T }[];
-          return rows.map((r) => r.data);
+          const list = rows.map((r) => r.data);
+          photosCache.set("all_photos", { data: list, timestamp: Date.now() });
+          return list;
         }
       } catch (e) {
         console.warn("Supabase Postgres readPhotos failed:", e);
@@ -494,7 +545,11 @@ export async function cloudReadPhotos<T extends { id: string }>(): Promise<T[] |
     }
   }
 
-  return await readJsonManifest<T[]>("photos.json", cfg);
+  const manifest = await readJsonManifest<T[]>("photos.json", cfg);
+  if (manifest) {
+    photosCache.set("all_photos", { data: manifest, timestamp: Date.now() });
+  }
+  return manifest;
 }
 
 export async function cloudUpsertPhoto<T extends { id: string; eventId?: string; likes?: number; createdAt?: string }>(
@@ -634,13 +689,20 @@ export async function cloudWriteAllPhotos<T extends { id: string; eventId?: stri
 // KV / Config Sync (watermark_config, culling_config, etc.)
 // =========================================================================
 export async function cloudReadConfig<T>(key: string): Promise<T | null> {
+  const cached = configCache.get(key);
+  if (cached && Date.now() - cached.timestamp < 30_000) {
+    return cached.data as T;
+  }
+
   const cfg = getStorageConfig();
 
   if (cfg.kv?.url && cfg.kv?.token) {
     try {
       const raw = await kvCommand<string>(cfg.kv.url, cfg.kv.token, ["GET", `lps:kv:${key}`]);
       if (raw) {
-        return typeof raw === "string" ? (JSON.parse(raw) as T) : (raw as T);
+        const val = typeof raw === "string" ? (JSON.parse(raw) as T) : (raw as T);
+        configCache.set(key, { data: val, timestamp: Date.now() });
+        return val;
       }
     } catch (_) {}
   }
@@ -659,13 +721,20 @@ export async function cloudReadConfig<T>(key: string): Promise<T | null> {
         });
         if (res.ok) {
           const rows = (await res.json()) as { value: T }[];
-          if (rows[0]?.value) return rows[0].value;
+          if (rows[0]?.value) {
+            configCache.set(key, { data: rows[0].value, timestamp: Date.now() });
+            return rows[0].value;
+          }
         }
       } catch (_) {}
     }
   }
 
-  return await readJsonManifest<T>(`${key}.json`, cfg);
+  const manifest = await readJsonManifest<T>(`${key}.json`, cfg);
+  if (manifest) {
+    configCache.set(key, { data: manifest, timestamp: Date.now() });
+  }
+  return manifest;
 }
 
 export async function cloudWriteConfig<T>(key: string, data: T): Promise<boolean> {

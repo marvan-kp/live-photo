@@ -4,7 +4,7 @@ import path from "path";
 import { getWatermarkConfigAsync, saveWatermarkConfigAsync, WatermarkConfig } from "@/lib/watermark";
 import { getUploadsDir, isVercelEnv } from "@/lib/paths";
 import { uploadToStorage } from "@/lib/cloudStorage";
-import { isUserAdmin } from "@/lib/auth";
+import { isUserAdmin, isKeyValidAdmin } from "@/lib/auth";
 
 export async function GET() {
   try {
@@ -24,9 +24,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const isAdmin = (await isUserAdmin()) ||
-      req.headers.get("x-admin-key") === "marvan2026" ||
-      req.headers.get("x-admin-password") === "marvan2026";
+    const headerKey = req.headers.get("x-admin-key") || req.headers.get("x-admin-password");
+    let isAdmin = (await isUserAdmin()) || (await isKeyValidAdmin(headerKey));
 
     // Also check multipart form admin key
     let formAdminKey = "";
@@ -38,7 +37,7 @@ export async function POST(req: Request) {
       const formData = await req.formData();
       formAdminKey = (formData.get("adminKey") as string) || "";
 
-      if (!isAdmin && formAdminKey !== "marvan2026" && formAdminKey !== "admin") {
+      if (!isAdmin && !(await isKeyValidAdmin(formAdminKey)) && formAdminKey !== "admin") {
         return NextResponse.json({ error: "Admin authentication required" }, { status: 403 });
       }
 
