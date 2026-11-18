@@ -22,9 +22,9 @@ export default function EventsPage() {
   const fetchEvents = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/events");
+      const res = await fetch(`/api/events?_t=${Date.now()}`, { cache: "no-store" });
       const data = await res.json();
-      setEvents(data.events);
+      setEvents(Array.isArray(data.events) ? data.events : []);
     } catch (error) {
       console.error("Failed to fetch events", error);
     } finally {
@@ -35,39 +35,37 @@ export default function EventsPage() {
   const handleSaveEvent = async (eventData: EventFormData) => {
     if (editingEvent) {
       // Update event
-      try {
-        const res = await fetch(`/api/events/${editingEvent.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(eventData),
-        });
-        if (res.ok) {
-          fetchEvents();
-          setIsModalOpen(false);
-          setEditingEvent(null);
-        } else {
-          console.error("Failed to update event");
-        }
-      } catch (error) {
-        console.error("Error updating event", error);
+      const res = await fetch(`/api/events/${editingEvent.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(eventData),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Failed to update event (HTTP ${res.status})`);
       }
+      if (data.event) {
+        setEvents((prev) => prev.map((ev) => (ev.id === data.event.id ? data.event : ev)));
+      }
+      setIsModalOpen(false);
+      setEditingEvent(null);
+      fetchEvents();
     } else {
       // Create new event
-      try {
-        const res = await fetch("/api/events", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(eventData),
-        });
-        if (res.ok) {
-          fetchEvents();
-          setIsModalOpen(false);
-        } else {
-          console.error("Failed to create event");
-        }
-      } catch (error) {
-        console.error("Error creating event", error);
+      const res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(eventData),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Failed to create event (HTTP ${res.status})`);
       }
+      if (data.event) {
+        setEvents((prev) => [data.event, ...prev.filter((ev) => ev.id !== data.event.id)]);
+      }
+      setIsModalOpen(false);
+      fetchEvents();
     }
   };
 

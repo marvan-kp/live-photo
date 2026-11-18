@@ -1,7 +1,7 @@
 "use client";
 
 import { GlassCard } from "@/components/ui/GlassCard";
-import { Calendar, MapPin, Image as ImageIcon, Edit, Trash2, QrCode, ExternalLink, Tv, Download, Lock, Clapperboard } from "lucide-react";
+import { Calendar, MapPin, Image as ImageIcon, Edit, Trash2, QrCode, ExternalLink, Tv, Download, Lock } from "lucide-react";
 import { Event } from "@/lib/events";
 import Link from "next/link";
 
@@ -101,18 +101,11 @@ export const EventCard = ({ event, onEdit, onDelete }: EventCardProps) => {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <a href={`/api/events/${event.id}/download`} download className="w-full">
-            <button className="w-full py-2 px-3 rounded-lg bg-white/5 hover:bg-white/15 text-white/80 hover:text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-white/10">
-              <Download className="w-3.5 h-3.5 text-accent" /> Master ZIP
-            </button>
-          </a>
-          <Link href={`/dashboard/reels?eventId=${event.id}`} className="w-full">
-            <button className="w-full py-2 px-3 rounded-lg bg-white/5 hover:bg-accent/20 text-white/85 hover:text-accent text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-white/10">
-              <Clapperboard className="w-3.5 h-3.5 text-accent" /> 9:16 Reel
-            </button>
-          </Link>
-        </div>
+        <a href={`/api/events/${event.id}/download`} download className="w-full block">
+          <button className="w-full py-2 px-3 rounded-lg bg-white/5 hover:bg-white/15 text-white/80 hover:text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-white/10">
+            <Download className="w-3.5 h-3.5 text-accent" /> Master ZIP Download
+          </button>
+        </a>
 
         <div className="flex gap-2 pt-1">
           {onEdit && (

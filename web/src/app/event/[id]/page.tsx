@@ -491,12 +491,11 @@ function GuestEventContent() {
     <main className="min-h-screen bg-background text-foreground pb-24">
       {/* Event Header Banner */}
       <div className="relative h-72 md:h-96 w-full overflow-hidden">
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={event.coverUrl || "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=1600"}
           alt={event.name}
-          fill
-          className="object-cover brightness-50"
-          priority
+          className="absolute inset-0 w-full h-full object-cover brightness-50"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
 
@@ -529,11 +528,6 @@ function GuestEventContent() {
             <Link href={`/event/${event.id}/live`}>
               <GlassButton variant="secondary" className="text-xs px-3 py-2 flex items-center gap-1.5">
                 <Tv className="w-4 h-4 text-accent" /> Live Stage Wall
-              </GlassButton>
-            </Link>
-            <Link href={`/event/${event.id}/reel`}>
-              <GlassButton variant="secondary" className="text-xs px-3 py-2 flex items-center gap-1.5">
-                <Clapperboard className="w-4 h-4 text-accent" /> 9:16 Reel
               </GlassButton>
             </Link>
             <a href={`/api/events/${event.id}/download`} download>

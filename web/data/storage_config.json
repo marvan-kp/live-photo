@@ -1,15 +1,1 @@
-{
-  "provider": "supabase",
-  "s3": {
-    "endpoint": "https://c9c2513ffb0e7185d74799ecdf4bfdad.r2.cloudflarestorage.com",
-    "bucketName": "live-photos",
-    "region": "auto",
-    "accessKeyId": "",
-    "secretAccessKey": ""
-  },
-  "supabase": {
-    "url": "https://xyz.supabase.co",
-    "serviceRoleKey": "secret_role_key_test_123",
-    "bucket": "live-photos"
-  }
-}
+{}

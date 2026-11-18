@@ -92,6 +92,7 @@ export default function DashboardSettingsPage() {
   const [supabaseSql, setSupabaseSql] = useState("");
   const [showSqlBox, setShowSqlBox] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
+  const [copiedEnv, setCopiedEnv] = useState(false);
   const [kvTesting, setKvTesting] = useState(false);
   const [kvSaving, setKvSaving] = useState(false);
   const [syncingCloud, setSyncingCloud] = useState(false);
@@ -384,6 +385,46 @@ export default function DashboardSettingsPage() {
     } catch (_) {}
   };
 
+  const handleCopyVercelEnv = async () => {
+    const lines: string[] = [];
+    if (provider === "vercel_blob" || (blobToken && !blobToken.includes("...") && !blobToken.includes("•"))) {
+      lines.push(`BLOB_READ_WRITE_TOKEN=${blobToken && !blobToken.includes("...") ? blobToken : "paste_your_vercel_blob_token_here"}`);
+    }
+    if (provider === "supabase" || supabaseUrl) {
+      lines.push(`SUPABASE_URL=${supabaseUrl || "https://your-project.supabase.co"}`);
+      lines.push(`SUPABASE_SERVICE_ROLE_KEY=${supabaseKey && !supabaseKey.includes("...") ? supabaseKey : "paste_your_service_role_key_here"}`);
+      lines.push(`SUPABASE_STORAGE_BUCKET=${supabaseBucket || "live-photos"}`);
+    }
+    if (provider === "s3_r2" || s3Endpoint) {
+      lines.push(`S3_ENDPOINT=${s3Endpoint || "https://account-id.r2.cloudflarestorage.com"}`);
+      lines.push(`S3_ACCESS_KEY_ID=${s3AccessKey && !s3AccessKey.includes("...") ? s3AccessKey : "paste_access_key_id"}`);
+      lines.push(`S3_SECRET_ACCESS_KEY=${s3SecretKey && !s3SecretKey.includes("•") ? s3SecretKey : "paste_secret_access_key"}`);
+      lines.push(`S3_BUCKET_NAME=${s3Bucket || "live-photos"}`);
+      lines.push(`S3_REGION=${s3Region || "auto"}`);
+      if (s3PublicUrl) lines.push(`S3_PUBLIC_URL=${s3PublicUrl}`);
+    }
+    if (kvUrl) {
+      lines.push(`KV_REST_API_URL=${kvUrl}`);
+      lines.push(`KV_REST_API_TOKEN=${kvToken && !kvToken.includes("...") ? kvToken : "paste_kv_token"}`);
+    }
+    if (lines.length === 0) {
+      lines.push(
+        "# Option 1 (Fastest — 30 sec): Connect Vercel Blob in Vercel Dashboard -> Storage -> Blob",
+        "BLOB_READ_WRITE_TOKEN=",
+        "",
+        "# Option 2 (Free 1GB): Connect Supabase Storage + DB",
+        "SUPABASE_URL=https://your-project.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY=",
+        "SUPABASE_STORAGE_BUCKET=live-photos"
+      );
+    }
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setCopiedEnv(true);
+      setTimeout(() => setCopiedEnv(false), 3000);
+    } catch (_) {}
+  };
+
   const handleTestConnection = async () => {
     setTesting(true);
     setTestResult(null);
@@ -663,6 +704,44 @@ export default function DashboardSettingsPage() {
             </pre>
           </div>
         )}
+
+        {/* Permanent Cloud Solution Guide for Vercel */}
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-accent/15 via-black/40 to-emerald-950/30 border border-accent/30 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-accent uppercase tracking-wider">
+              <Cloud className="w-4 h-4" />
+              Permanent Cloud Solution (100% Permanent Events, Photos &amp; Passwords on Vercel)
+            </div>
+            <button
+              type="button"
+              onClick={handleCopyVercelEnv}
+              className="px-3 py-1.5 rounded-lg bg-accent/20 hover:bg-accent/30 border border-accent/40 text-accent text-xs font-semibold flex items-center gap-1.5 self-start sm:self-auto"
+            >
+              {copiedEnv ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copiedEnv ? "Copied Vercel .env Keys!" : "Copy Vercel .env Block"}
+            </button>
+          </div>
+          {envDetected?.blobEnv || envDetected?.supabaseEnv || envDetected?.r2Env || envDetected?.kvEnv ? (
+            <p className="text-xs text-emerald-400 flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+              Permanent Vercel Environment Variables detected! All events, photos, watermarks, and admin passwords persist permanently across restarts.
+            </p>
+          ) : (
+            <div className="text-xs text-white/75 space-y-1.5">
+              <p className="text-amber-300 font-medium">
+                Vercel serverless containers reset local <code className="text-white">/tmp</code> files on restart. To lock in 100% permanent cloud storage forever (takes 30 seconds, free):
+              </p>
+              <ol className="list-decimal list-inside space-y-1 text-white/70 pl-1">
+                <li>
+                  <strong className="text-white">Fastest (1-Click Vercel Blob — Zero Keys Needed):</strong> Open your Vercel Dashboard → click <strong className="text-accent">Storage</strong> → <strong className="text-accent">Create Database → Blob</strong> → <strong className="text-accent">Connect Project</strong> → click <strong className="text-white">Redeploy</strong>.
+                </li>
+                <li>
+                  <strong className="text-white">OR Use Supabase / Cloudflare R2:</strong> Enter your keys below, click <strong className="text-accent">Copy Vercel .env Block</strong> above, paste them into Vercel → <strong className="text-white">Settings → Environment Variables</strong>, and Redeploy.
+                </li>
+              </ol>
+            </div>
+          )}
+        </div>
 
         {cloudSyncMsg && (
           <div

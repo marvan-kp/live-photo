@@ -15,8 +15,7 @@ import {
   Sparkles,
   Heart,
   Loader2,
-  Plus,
-  Clapperboard
+  Plus
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -94,11 +93,6 @@ export default function DashboardOverviewPage() {
               <Upload className="w-4 h-4" /> Host Upload
             </GlassButton>
           </Link>
-          <Link href="/dashboard/reels">
-            <GlassButton variant="secondary" className="text-xs px-4 py-2.5 flex items-center gap-1.5">
-              <Clapperboard className="w-4 h-4 text-accent" /> 9:16 Reel
-            </GlassButton>
-          </Link>
           <Link href="/download">
             <GlassButton variant="secondary" className="text-xs px-4 py-2.5 flex items-center gap-1.5 border-accent/40 text-accent">
               <Smartphone className="w-4 h-4" /> Android APK
@@ -148,25 +142,22 @@ export default function DashboardOverviewPage() {
               </div>
 
               {/* Action Buttons for this Event */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
-                <Link href={`/event/${event.id}`} target="_blank">
-                  <button className="w-full py-2 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5">
-                    <ExternalLink className="w-3.5 h-3.5" /> Guest View
-                  </button>
-                </Link>
-                <Link href={`/event/${event.id}/live`} target="_blank">
-                  <button className="w-full py-2 px-3 rounded-lg bg-accent/20 hover:bg-accent/30 text-accent text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-accent/30">
-                    <Tv className="w-3.5 h-3.5" /> Projector
-                  </button>
-                </Link>
-                <Link href={`/dashboard/reels?eventId=${event.id}`}>
-                  <button className="w-full py-2 px-3 rounded-lg bg-white/5 hover:bg-accent/20 text-white/85 hover:text-accent text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-white/10">
-                    <Clapperboard className="w-3.5 h-3.5 text-accent" /> 9:16 Reel
-                  </button>
-                </Link>
-                <a href={`/api/events/${event.id}/download`} download>
+              <div className="space-y-2 pt-2 border-t border-white/10">
+                <div className="grid grid-cols-2 gap-2">
+                  <Link href={`/event/${event.id}`} target="_blank">
+                    <button className="w-full py-2 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5">
+                      <ExternalLink className="w-3.5 h-3.5" /> Guest View
+                    </button>
+                  </Link>
+                  <Link href={`/event/${event.id}/live`} target="_blank">
+                    <button className="w-full py-2 px-3 rounded-lg bg-accent/20 hover:bg-accent/30 text-accent text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-accent/30">
+                      <Tv className="w-3.5 h-3.5" /> Live Projector
+                    </button>
+                  </Link>
+                </div>
+                <a href={`/api/events/${event.id}/download`} download className="block w-full">
                   <button className="w-full py-2 px-3 rounded-lg bg-white/5 hover:bg-white/15 text-white/80 hover:text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border border-white/10">
-                    <Upload className="w-3.5 h-3.5 text-accent rotate-180" /> ZIP Download
+                    <Upload className="w-3.5 h-3.5 text-accent rotate-180" /> Master ZIP Download
                   </button>
                 </a>
               </div>

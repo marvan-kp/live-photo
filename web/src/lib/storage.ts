@@ -28,6 +28,12 @@ export interface StoredFile {
   isCulled?: boolean;
   aiReason?: string;
   burstGroupId?: string;
+  reelId?: string;
+  reelTitle?: string;
+  reelDescription?: string;
+  reelCreatedAt?: string;
+  reelEffect?: string;
+  reelWatermarked?: boolean;
 }
 
 const DATA_FILE = getDataFilePath('photos.json');

@@ -34,8 +34,22 @@ declare global {
   var __GLOBAL_STORAGE_CONFIG__: StorageConfig | undefined;
 }
 
-function normalizeEnvConfig(base: StorageConfig): StorageConfig {
-  const merged: StorageConfig = { ...base };
+function normalizeEnvConfig(base: Partial<StorageConfig>): StorageConfig {
+  const merged: StorageConfig = {
+    provider: "local",
+    ...base,
+  };
+
+  // Strip any accidental placeholder/test Supabase credentials
+  if (
+    merged.supabase?.url?.includes("xyz.supabase.co") ||
+    merged.supabase?.serviceRoleKey === "secret_role_key_test_123"
+  ) {
+    merged.supabase = undefined;
+    if (base.provider === "supabase") {
+      base = { ...base, provider: undefined };
+    }
+  }
 
   const validProviders: ("local" | "supabase" | "s3_r2" | "vercel_blob")[] = [
     "local",
@@ -87,7 +101,7 @@ function normalizeEnvConfig(base: StorageConfig): StorageConfig {
     };
   }
 
-  // Only if no valid provider was explicitly chosen, pick the best available default
+  // Only if no valid provider was explicitly chosen, auto-activate the best permanent Cloud provider
   if (!hasExplicitProvider) {
     if (merged.blobToken) {
       merged.provider = "vercel_blob";
@@ -111,7 +125,7 @@ export function getStorageConfig(): StorageConfig {
   try {
     if (fs.existsSync(/*turbopackIgnore: true*/ CONFIG_FILE)) {
       const data = fs.readFileSync(/*turbopackIgnore: true*/ CONFIG_FILE, "utf-8");
-      const parsed = JSON.parse(data) as StorageConfig;
+      const parsed = JSON.parse(data) as Partial<StorageConfig>;
       const normalized = normalizeEnvConfig(parsed);
       globalThis.__GLOBAL_STORAGE_CONFIG__ = normalized;
       return normalized;
@@ -124,14 +138,14 @@ export function getStorageConfig(): StorageConfig {
   try {
     const cwdConfig = path.join(process.cwd(), "data", "storage_config.json");
     if (cwdConfig !== CONFIG_FILE && fs.existsSync(/*turbopackIgnore: true*/ cwdConfig)) {
-      const parsed = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ cwdConfig, "utf-8")) as StorageConfig;
+      const parsed = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ cwdConfig, "utf-8")) as Partial<StorageConfig>;
       const normalized = normalizeEnvConfig(parsed);
       globalThis.__GLOBAL_STORAGE_CONFIG__ = normalized;
       return normalized;
     }
   } catch (_) {}
 
-  const fallback = normalizeEnvConfig({ provider: "local" });
+  const fallback = normalizeEnvConfig({});
   globalThis.__GLOBAL_STORAGE_CONFIG__ = fallback;
   return fallback;
 }
