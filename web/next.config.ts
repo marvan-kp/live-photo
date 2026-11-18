@@ -5,6 +5,12 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["sharp"],
   cacheComponents: true,
   partialPrefetching: true,
+  images: {
+    unoptimized: true,
+    remotePatterns: [
+      { protocol: "https", hostname: "**" },
+    ],
+  },
   turbopack: {
     rules: {
       "*.css": {
@@ -16,20 +22,20 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/api/reels/:path*",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=60, stale-while-revalidate=300",
-          },
-        ],
-      },
-      {
         source: "/api/photos/:path*",
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=30, stale-while-revalidate=120",
+            value: "no-store, no-cache, must-revalidate, max-age=0",
+          },
+        ],
+      },
+      {
+        source: "/api/events/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, no-cache, must-revalidate, max-age=0",
           },
         ],
       },

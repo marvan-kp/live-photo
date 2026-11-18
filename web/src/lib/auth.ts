@@ -54,10 +54,6 @@ export function getAdminConfig(): AdminConfig {
 }
 
 export async function getAdminConfigAsync(): Promise<AdminConfig> {
-  if (globalThis.__GLOBAL_ADMIN_CONFIG__) {
-    return { ...globalThis.__GLOBAL_ADMIN_CONFIG__ };
-  }
-
   try {
     const { cloudReadConfig } = await import('./cloudDb');
     const cloud = await cloudReadConfig<AdminConfig>('admin_config');
@@ -66,6 +62,10 @@ export async function getAdminConfigAsync(): Promise<AdminConfig> {
       return cloud;
     }
   } catch (_) {}
+
+  if (globalThis.__GLOBAL_ADMIN_CONFIG__) {
+    return { ...globalThis.__GLOBAL_ADMIN_CONFIG__ };
+  }
 
   return getAdminConfig();
 }
