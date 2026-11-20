@@ -249,7 +249,7 @@ async function writeJsonManifest<T>(filename: string, data: T, cfg: StorageConfi
         addRandomSuffix: false,
         allowOverwrite: true,
         contentType: "application/json",
-        cacheControlMaxAge: 60,
+        cacheControlMaxAge: 0,
         token: blobToken,
       });
       wrote = true;
@@ -346,6 +346,7 @@ export async function cloudReadEvents<T extends { id: string }>(): Promise<T[] |
 }
 
 export async function cloudUpsertEvent<T extends { id: string }>(event: T): Promise<void> {
+  eventsCache.clear();
   const cfg = getStorageConfig();
 
   if (cfg.kv?.url && cfg.kv?.token) {
@@ -387,10 +388,12 @@ export async function cloudUpsertEvent<T extends { id: string }>(event: T): Prom
   const idx = existing.findIndex((e) => e.id === event.id);
   if (idx >= 0) existing[idx] = event;
   else existing.unshift(event);
+  eventsCache.clear();
   await writeJsonManifest("events.json", existing, cfg);
 }
 
 export async function cloudDeleteEvent(id: string): Promise<void> {
+  eventsCache.clear();
   const cfg = getStorageConfig();
 
   if (cfg.kv?.url && cfg.kv?.token) {
@@ -555,6 +558,7 @@ export async function cloudReadPhotos<T extends { id: string }>(): Promise<T[] |
 export async function cloudUpsertPhoto<T extends { id: string; eventId?: string; likes?: number; createdAt?: string }>(
   photo: T
 ): Promise<void> {
+  photosCache.clear();
   const cfg = getStorageConfig();
 
   if (cfg.kv?.url && cfg.kv?.token) {
@@ -598,10 +602,12 @@ export async function cloudUpsertPhoto<T extends { id: string; eventId?: string;
   const idx = existing.findIndex((p) => p.id === photo.id);
   if (idx >= 0) existing[idx] = photo;
   else existing.unshift(photo);
+  photosCache.clear();
   await writeJsonManifest("photos.json", existing, cfg);
 }
 
 export async function cloudDeletePhoto(id: string): Promise<void> {
+  photosCache.clear();
   const cfg = getStorageConfig();
 
   if (cfg.kv?.url && cfg.kv?.token) {
@@ -636,6 +642,7 @@ export async function cloudDeletePhoto(id: string): Promise<void> {
 export async function cloudWriteAllPhotos<T extends { id: string; eventId?: string; likes?: number; createdAt?: string }>(
   photos: T[]
 ): Promise<boolean> {
+  photosCache.clear();
   const cfg = getStorageConfig();
   let ok = false;
 
