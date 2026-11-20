@@ -384,12 +384,17 @@ export async function cloudUpsertEvent<T extends { id: string }>(event: T): Prom
     }
   }
 
+  const inMemory = (globalThis as any).__GLOBAL_EVENTS__ || [];
   const existing = (await readJsonManifest<T[]>("events.json", cfg)) || [];
-  const idx = existing.findIndex((e) => e.id === event.id);
-  if (idx >= 0) existing[idx] = event;
-  else existing.unshift(event);
+  const map = new Map<string, T>();
+  existing.forEach((e) => map.set(e.id, e));
+  inMemory.forEach((e: any) => {
+    if (e?.id) map.set(e.id, e as T);
+  });
+  map.set(event.id, event);
+  const combined = Array.from(map.values());
   eventsCache.clear();
-  await writeJsonManifest("events.json", existing, cfg);
+  await writeJsonManifest("events.json", combined, cfg);
 }
 
 export async function cloudDeleteEvent(id: string): Promise<void> {
@@ -598,12 +603,19 @@ export async function cloudUpsertPhoto<T extends { id: string; eventId?: string;
     }
   }
 
+  const inMemory = (globalThis as any).__GLOBAL_PHOTOS__ || [];
   const existing = (await readJsonManifest<T[]>("photos.json", cfg)) || [];
-  const idx = existing.findIndex((p) => p.id === photo.id);
-  if (idx >= 0) existing[idx] = photo;
-  else existing.unshift(photo);
+  const map = new Map<string, T>();
+  existing.forEach((p) => map.set(p.id, p));
+  inMemory.forEach((p: any) => {
+    if (p?.id) map.set(p.id, p as T);
+  });
+  map.set(photo.id, photo);
+  const combined = Array.from(map.values()).sort(
+    (a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
   photosCache.clear();
-  await writeJsonManifest("photos.json", existing, cfg);
+  await writeJsonManifest("photos.json", combined, cfg);
 }
 
 export async function cloudDeletePhoto(id: string): Promise<void> {

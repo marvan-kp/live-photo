@@ -77,13 +77,20 @@ export function loadPhotos(): Map<string, StoredFile> {
 }
 
 export function savePhotos(photos: StoredFile[]) {
-  globalThis.__GLOBAL_PHOTOS__ = photos;
+  const currentGlobal = globalThis.__GLOBAL_PHOTOS__ || [];
+  const map = new Map<string, StoredFile>();
+  currentGlobal.forEach((p) => map.set(p.id, p));
+  photos.forEach((p) => map.set(p.id, p));
+  const merged = Array.from(map.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  globalThis.__GLOBAL_PHOTOS__ = merged;
   try {
     const dir = path.dirname(DATA_FILE);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(DATA_FILE, JSON.stringify(photos, null, 2), 'utf-8');
+    fs.writeFileSync(DATA_FILE, JSON.stringify(merged, null, 2), 'utf-8');
   } catch (e) {
     console.warn('Could not save photos to disk:', e);
   }
@@ -93,7 +100,7 @@ export function savePhotos(photos: StoredFile[]) {
     if (cwdFile !== DATA_FILE) {
       const cwdDir = path.dirname(cwdFile);
       if (!fs.existsSync(cwdDir)) fs.mkdirSync(cwdDir, { recursive: true });
-      fs.writeFileSync(cwdFile, JSON.stringify(photos, null, 2), "utf-8");
+      fs.writeFileSync(cwdFile, JSON.stringify(merged, null, 2), "utf-8");
     }
   } catch (_) {}
 }

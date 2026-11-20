@@ -92,13 +92,18 @@ export function loadEvents(): Event[] {
 }
 
 export function saveEvents(events: Event[]) {
-  globalThis.__GLOBAL_EVENTS__ = events;
+  const currentGlobal = globalThis.__GLOBAL_EVENTS__ || [];
+  const map = new Map<string, Event>();
+  currentGlobal.forEach((e) => map.set(e.id, e));
+  events.forEach((e) => map.set(e.id, e));
+  const merged = Array.from(map.values());
+  globalThis.__GLOBAL_EVENTS__ = merged;
   try {
     const dir = path.dirname(DATA_FILE);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(DATA_FILE, JSON.stringify(events, null, 2), 'utf-8');
+    fs.writeFileSync(DATA_FILE, JSON.stringify(merged, null, 2), 'utf-8');
   } catch (e) {
     console.warn('Could not save events to disk:', e);
   }
@@ -108,7 +113,7 @@ export function saveEvents(events: Event[]) {
     if (cwdFile !== DATA_FILE) {
       const cwdDir = path.dirname(cwdFile);
       if (!fs.existsSync(cwdDir)) fs.mkdirSync(cwdDir, { recursive: true });
-      fs.writeFileSync(cwdFile, JSON.stringify(events, null, 2), "utf-8");
+      fs.writeFileSync(cwdFile, JSON.stringify(merged, null, 2), "utf-8");
     }
   } catch (_) {}
 }
