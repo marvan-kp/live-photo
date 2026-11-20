@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { GlassButton } from "@/components/ui/GlassButton";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { UploadZone } from "@/components/upload/UploadZone";
-import { Loader2, CheckCircle2, Tv, ExternalLink } from "lucide-react";
+import { Loader2, CheckCircle2, Tv, ExternalLink, AlertCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { uploadPhotosIndividually } from "@/lib/clientUpload";
 
 interface Event {
   id: string;
@@ -20,7 +21,9 @@ export default function UploadPage() {
   const [batchCaption, setBatchCaption] = useState<string>("");
   const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; currentFileName: string } | null>(null);
   const [uploadSuccessCount, setUploadSuccessCount] = useState<number | null>(null);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
 
   useEffect(() => {
     fetch("/api/events")
@@ -38,48 +41,32 @@ export default function UploadPage() {
 
     setIsUploading(true);
     setUploadSuccessCount(null);
-
-    const formData = new FormData();
-    files.forEach((file) => formData.append("files", file));
-    if (selectedEventId) formData.append("eventId", selectedEventId);
-    if (photographerName) formData.append("guestName", photographerName);
-    if (batchCaption) formData.append("caption", batchCaption);
-    formData.append("adminKey", "marvan2026");
-
-    if (typeof window !== "undefined") {
-      const savedWm = localStorage.getItem("livephoto_watermark_config");
-      if (savedWm) {
-        try {
-          const parsed = JSON.parse(savedWm);
-          if (parsed.position) formData.append("watermarkPosition", parsed.position);
-          if (parsed.scale) formData.append("watermarkScale", String(parsed.scale));
-          if (parsed.opacity) formData.append("watermarkOpacity", String(parsed.opacity));
-          if (parsed.enabled !== undefined) formData.append("watermarkEnabled", String(parsed.enabled));
-        } catch (_) {}
-      }
-    }
+    setUploadErrors([]);
+    setUploadProgress({ current: 0, total: files.length, currentFileName: files[0]?.name || "" });
 
     try {
-      const response = await fetch("/api/photos", {
-        method: "POST",
-        headers: {
-          "x-admin-key": "marvan2026",
+      const result = await uploadPhotosIndividually(files, {
+        eventId: selectedEventId,
+        guestName: photographerName.trim() || "Official Photographer",
+        caption: batchCaption.trim(),
+        onProgress: (completed, total, currentFile) => {
+          setUploadProgress({ current: completed, total, currentFileName: currentFile });
         },
-        body: formData,
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setUploadSuccessCount(data.count || files.length);
+      if (result.uploadedFiles.length > 0) {
+        setUploadSuccessCount(result.uploadedFiles.length);
         setFiles([]);
-      } else {
-        const errJson = await response.json().catch(() => ({}));
-        alert(errJson.error || "Upload failed. Please check file sizes or formats.");
       }
-    } catch (error) {
-      alert("Error uploading files.");
+
+      if (result.errors.length > 0) {
+        setUploadErrors(result.errors);
+      }
+    } catch (error: any) {
+      setUploadErrors([error?.message || "Error uploading files."]);
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -137,6 +124,49 @@ export default function UploadPage() {
 
         {/* Drag and Drop Zone */}
         <UploadZone onUpload={setFiles} />
+
+        {/* Live Upload Progress */}
+        {uploadProgress && (
+          <div className="p-4 rounded-2xl bg-accent/10 border border-accent/30 space-y-2">
+            <div className="flex justify-between items-center text-xs">
+              <span className="font-semibold text-accent flex items-center gap-1.5">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Processing {uploadProgress.current + 1} of {uploadProgress.total}
+              </span>
+              <span className="text-white/60 font-mono">
+                {Math.round(((uploadProgress.current) / uploadProgress.total) * 100)}%
+              </span>
+            </div>
+            <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-accent h-full transition-all duration-300 rounded-full"
+                style={{
+                  width: `${Math.max(5, Math.round(((uploadProgress.current) / uploadProgress.total) * 100))}%`,
+                }}
+              />
+            </div>
+            <p className="text-[11px] text-white/50 truncate">
+              Optimizing & uploading: {uploadProgress.currentFileName || "Completing batch..."}
+            </p>
+          </div>
+        )}
+
+        {/* Errors Callout if any */}
+        {uploadErrors.length > 0 && (
+          <div className="p-4 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs space-y-1.5">
+            <div className="flex items-center gap-2 font-semibold">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>Some files could not be uploaded:</span>
+            </div>
+            <ul className="list-disc list-inside space-y-0.5 text-red-300/80 pl-2">
+              {uploadErrors.map((err, idx) => (
+                <li key={idx} className="truncate">
+                  {err}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center justify-between pt-2">

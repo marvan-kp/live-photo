@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+import { uploadPhotosIndividually } from "@/lib/clientUpload";
 
 interface EventData {
   id: string;
@@ -260,60 +261,33 @@ function GuestEventContent() {
       localStorage.setItem("livephoto_guest_name", guestName);
     }
 
-    const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-      formData.append("files", files[i]);
-    }
-    if (event?.id) formData.append("eventId", event.id);
-    if (guestName) formData.append("guestName", guestName);
-    if (caption) formData.append("caption", caption);
-    formData.append("adminKey", "marvan2026");
-
-    if (typeof window !== "undefined") {
-      const savedWm = localStorage.getItem("livephoto_watermark_config");
-      if (savedWm) {
-        try {
-          const parsed = JSON.parse(savedWm);
-          if (parsed.position) formData.append("watermarkPosition", parsed.position);
-          if (parsed.scale) formData.append("watermarkScale", String(parsed.scale));
-          if (parsed.opacity) formData.append("watermarkOpacity", String(parsed.opacity));
-          if (parsed.enabled !== undefined) formData.append("watermarkEnabled", String(parsed.enabled));
-        } catch (_) {}
-      }
-    }
-
     try {
-      const res = await fetch("/api/photos", {
-        method: "POST",
-        headers: {
-          "x-admin-key": "marvan2026",
-        },
-        body: formData,
+      const result = await uploadPhotosIndividually(files, {
+        eventId: event?.id,
+        guestName: guestName.trim() || "Guest",
+        caption: caption.trim(),
       });
 
-      if (res.ok) {
-        const uploadResult = await res.json();
-        // Immediately add newly uploaded photos to the stream optimistically
-        if (uploadResult.files && Array.isArray(uploadResult.files)) {
-          setPhotos((prev) => {
-            const map = new Map<string, PhotoData>();
-            uploadResult.files.forEach((p: PhotoData) => map.set(p.id, p));
-            prev.forEach((p) => {
-              if (!map.has(p.id)) map.set(p.id, p);
-            });
-            return Array.from(map.values()).sort(
-              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            );
+      if (result.uploadedFiles && result.uploadedFiles.length > 0) {
+        setPhotos((prev) => {
+          const map = new Map<string, PhotoData>();
+          result.uploadedFiles.forEach((p: PhotoData) => map.set(p.id, p));
+          prev.forEach((p) => {
+            if (!map.has(p.id)) map.set(p.id, p);
           });
-        }
+          return Array.from(map.values()).sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        });
         setUploadSuccess(true);
         setCaption("");
         if (fileInputRef.current) fileInputRef.current.value = "";
         fetchEventData();
         setTimeout(() => setUploadSuccess(false), 4000);
-      } else {
-        const errJson = await res.json().catch(() => ({}));
-        alert(errJson.error || "Upload failed. Please try again.");
+      }
+
+      if (result.failedCount > 0 && result.uploadedFiles.length === 0) {
+        alert(result.errors[0] || "Upload failed. Please check file sizes or formats.");
       }
     } catch (err) {
       alert("Error uploading photos. Please check your network connection.");

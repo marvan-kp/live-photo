@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { preparePhotoForUpload } from "@/lib/clientUpload";
 
 interface EventItem {
   id: string;
@@ -124,8 +125,13 @@ export default function CameraTetherPage() {
     setLogs((prev) => [newLog, ...prev.slice(0, 49)]);
 
     try {
+      const prepared = await preparePhotoForUpload(file);
+
       const formData = new FormData();
-      formData.append("files", file);
+      formData.append("files", prepared.fileBlob, prepared.fileName);
+      if (prepared.thumbBlob) {
+        formData.append("thumbnails", prepared.thumbBlob, `thumb_${prepared.fileName}`);
+      }
       formData.append("eventId", selectedEventId || selectedEvent?.id || "default");
       formData.append("guestName", photographerName.trim() || "Photographer");
       formData.append("caption", caption.trim());
